@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
@@ -8,84 +7,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// OCR 텍스트 추출 함수 (GPT-4 Vision 사용)
-async function extractTextWithOCR(content: string, metadata: any): Promise<string> {
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-  
-  if (!openaiApiKey) {
-    throw new Error('OpenAI API 키가 설정되지 않았습니다.');
-  }
-
-  console.log('GPT-4 Vision을 사용하여 OCR 텍스트 추출 시작');
-
+// 간단한 텍스트 추출 함수
+function extractTextFromBinaryData(content: string): string {
   try {
-    // PDF 바이너리 데이터를 base64로 변환 (이미지로 처리)
-    const base64Content = btoa(content);
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: `당신은 OCR 전문가입니다. 이미지나 문서에서 한국어 텍스트를 정확하게 읽고 추출해주세요.
-            
-            다음 규칙을 따라주세요:
-            1. 모든 한국어 텍스트를 정확하게 읽어주세요
-            2. 표, 목록, 단락 구조를 유지해주세요
-            3. 특수문자나 기호도 포함해주세요
-            4. 당직근무, 민원처리 관련 내용은 특히 자세히 읽어주세요
-            5. 읽을 수 없는 부분은 [읽을 수 없음]으로 표시해주세요
-            
-            추출된 텍스트만 반환해주세요.`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `다음 문서에서 OCR로 텍스트를 추출해주세요:
-                파일명: ${metadata?.filename || 'unknown'}
-                제목: ${metadata?.title || 'unknown'}`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:application/pdf;base64,${base64Content.substring(0, 10000)}`,
-                  detail: 'high'
-                }
-              }
-            ]
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 2500,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API 오류: ${response.statusText}`);
+    // 이미 읽을 수 있는 텍스트인지 확인
+    if (/^[가-힣\s\w\W]*$/.test(content) && content.length > 10) {
+      return content;
     }
 
-    const data = await response.json();
-    const extractedText = data.choices[0].message.content;
+    // PDF나 바이너리 데이터에서 텍스트 패턴 찾기
+    const textPatterns = [
+      /\(([^)]+)\)/g,  // PDF 텍스트 객체
+      />\s*([가-힣\w\s.,!?]+)\s*</g,  // XML/HTML 태그 내 텍스트
+      /\b([가-힣\w\s.,!?]{3,})\b/g,  // 일반적인 텍스트 패턴
+    ];
     
-    console.log('GPT-4 Vision OCR 텍스트 추출 완료, 길이:', extractedText.length);
+    let extractedText = '';
     
-    if (!extractedText || extractedText.trim().length < 50) {
-      throw new Error('OCR로 추출된 텍스트가 너무 짧습니다.');
+    for (const pattern of textPatterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        const text = match[1];
+        if (text && text.trim().length > 2 && /[가-힣a-zA-Z]/.test(text)) {
+          extractedText += text.trim() + ' ';
+        }
+      }
     }
     
-    return extractedText.trim();
+    // 추출된 텍스트 정리
+    extractedText = extractedText.replace(/\s+/g, ' ').trim();
+    
+    if (extractedText.length > 20) {
+      return extractedText;
+    }
+    
+    throw new Error('텍스트를 추출할 수 없습니다.');
     
   } catch (error) {
-    console.error('GPT-4 Vision OCR 추출 오류:', error);
-    throw new Error('OCR 텍스트 추출에 실패했습니다: ' + error.message);
+    console.error('텍스트 추출 오류:', error);
+    throw new Error('파일에서 텍스트를 추출할 수 없습니다.');
   }
 }
 
@@ -110,18 +70,18 @@ serve(async (req) => {
 
     console.log('Processing content for vectorization:', metadata?.title);
 
-    // 콘텐츠 처리
+    // 콘텐츠 처리 - 바이너리 데이터 확인
     let processedContent = content;
     
-    // PDF 파일인지 확인
-    if (metadata?.type === 'application/pdf' || metadata?.filename?.endsWith('.pdf') || 
-        (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-')))) {
-      console.log('PDF 파일 감지, GPT-4 Vision OCR로 텍스트 추출 시작');
+    // 바이너리나 PDF 데이터인지 확인
+    if (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-') || content.length > 1000)) {
+      console.log('바이너리/PDF 파일 감지, 텍스트 추출 시작');
       try {
-        processedContent = await extractTextWithOCR(content, metadata);
-      } catch (extractError) {
-        console.error('OCR 텍스트 추출 실패:', extractError);
-        throw new Error('PDF 파일에서 OCR 텍스트를 추출할 수 없습니다: ' + extractError.message);
+        processedContent = extractTextFromBinaryData(content);
+        console.log('텍스트 추출 완료, 길이:', processedContent.length);
+      } catch (textError) {
+        console.error('텍스트 추출 실패:', textError);
+        throw new Error('파일에서 텍스트를 추출할 수 없습니다. .txt 또는 일반 텍스트 파일로 다시 시도해주세요.');
       }
     }
 
@@ -169,8 +129,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '학습 자료가 OCR로 성공적으로 추출되어 벡터화되었습니다.',
-      extractedLength: processedContent.length
+      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.' 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

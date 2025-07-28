@@ -25,18 +25,6 @@ interface Message {
   type: 'user' | 'system';
   content: string;
   timestamp: Date;
-  similarCases?: SimilarCase[];
-}
-
-interface SimilarCase {
-  id: number;
-  summary: string;
-  fullContent: string;
-  serialNumber: string;
-  department: string;
-  status: string;
-  date: string;
-  similarity: number;
 }
 
 const DutyMode = () => {
@@ -61,7 +49,6 @@ const DutyMode = () => {
   const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
-  const [selectedCase, setSelectedCase] = useState<SimilarCase | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -144,8 +131,7 @@ const DutyMode = () => {
         id: (Date.now() + 1).toString(),
         type: 'system',
         content: data.reply,
-        timestamp: new Date(),
-        similarCases: data.similarCases || []
+        timestamp: new Date()
       };
       
       setChatMessages(prev => [...prev, systemMessage]);
@@ -382,34 +368,6 @@ ${complaintForm.description}
                         }`}
                       >
                         <div className="whitespace-pre-wrap">{message.content}</div>
-                        
-                        {/* 유사민원 버튼들 */}
-                        {message.type === 'system' && message.similarCases && message.similarCases.length > 0 && (
-                          <div className="mt-4 space-y-2">
-                            <div className="text-sm font-medium text-primary">📋 유사민원 사례</div>
-                            <div className="grid gap-2">
-                              {message.similarCases.map((similarCase) => (
-                                <Button
-                                  key={similarCase.id}
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setSelectedCase(similarCase)}
-                                  className="justify-start text-left h-auto p-3 hover:bg-accent/50"
-                                >
-                                  <div className="space-y-1">
-                                    <div className="font-medium text-sm">
-                                      사례 {similarCase.id}: {similarCase.summary}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {similarCase.department} • 유사도 {similarCase.similarity}%
-                                    </div>
-                                  </div>
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString('ko-KR')}
                         </div>
@@ -561,71 +519,6 @@ ${complaintForm.description}
                   <div className="mt-1 p-2 bg-muted rounded">{selectedDuty.notes}</div>
                 </div>
               )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Similar Case Detail Dialog */}
-      <Dialog open={!!selectedCase} onOpenChange={() => setSelectedCase(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              유사민원 상세 정보
-            </DialogTitle>
-            <DialogDescription>
-              선택하신 유사민원의 상세 내용입니다.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedCase && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">민원번호</Label>
-                  <div className="text-lg font-mono">{selectedCase.serialNumber}</div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">처리 부서</Label>
-                  <div>{selectedCase.department}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">처리 상태</Label>
-                  <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                    selectedCase.status === '완료' || selectedCase.status === '처리완료' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {selectedCase.status}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">처리 날짜</Label>
-                  <div>{selectedCase.date}</div>
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">유사도</Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-primary h-2 rounded-full" 
-                      style={{ width: `${selectedCase.similarity}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-sm font-medium">{selectedCase.similarity}%</span>
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">민원 내용</Label>
-                <div className="mt-2 p-4 bg-muted rounded-lg max-h-60 overflow-y-auto">
-                  <div className="whitespace-pre-wrap text-sm">
-                    {selectedCase.fullContent}
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </DialogContent>
