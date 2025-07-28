@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2 } from "lucide-react";
+import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2, Edit, Plus } from "lucide-react";
 import * as XLSX from 'xlsx';
 
 const AdminMode = () => {
@@ -27,6 +27,10 @@ const AdminMode = () => {
   // State for training materials and civil complaints vectors
   const [trainingMaterials, setTrainingMaterials] = useState<any[]>([]);
   const [civilComplaintsVectors, setCivilComplaintsVectors] = useState<any[]>([]);
+  
+  // State for duty schedules
+  const [dutySchedules, setDutySchedules] = useState<any[]>([]);
+  const [editingDuty, setEditingDuty] = useState<any>(null);
   
   const { toast } = useToast();
 
@@ -103,8 +107,63 @@ const AdminMode = () => {
         phone: "",
         notes: ""
       });
+      fetchDutySchedules(); // Refresh the list
     }
     setIsLoading(false);
+  };
+
+  const handleDutyUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDuty) return;
+    
+    setIsLoading(true);
+    
+    const { error } = await supabase
+      .from('duty_schedule')
+      .update({
+        department_name: editingDuty.department_name,
+        duty_facility: editingDuty.duty_facility,
+        duty_day: editingDuty.duty_day,
+        phone_number: editingDuty.phone_number
+      })
+      .eq('id', editingDuty.id);
+
+    if (error) {
+      toast({
+        title: "수정 실패",
+        description: "당직 정보 수정에 실패했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "수정 완료",
+        description: "당직 정보가 성공적으로 수정되었습니다."
+      });
+      setEditingDuty(null);
+      fetchDutySchedules();
+    }
+    setIsLoading(false);
+  };
+
+  const handleDutyDelete = async (dutyId: string) => {
+    const { error } = await supabase
+      .from('duty_schedule')
+      .delete()
+      .eq('id', dutyId);
+
+    if (error) {
+      toast({
+        title: "삭제 실패",
+        description: "당직 정보 삭제에 실패했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "삭제 완료",
+        description: "당직 정보가 성공적으로 삭제되었습니다."
+      });
+      fetchDutySchedules();
+    }
   };
 
   // Training material upload handler
@@ -403,11 +462,31 @@ const AdminMode = () => {
     window.open('https://supabase.com/dashboard/project/rlndmoxsnccurcfpxeai/logs/explorer', '_blank');
   };
 
+  // Fetch duty schedules
+  const fetchDutySchedules = async () => {
+    const { data, error } = await supabase
+      .from('duty_schedule')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching duty schedules:', error);
+      toast({
+        title: "오류",
+        description: "당직 정보 목록을 불러오는데 실패했습니다.",
+        variant: "destructive",
+      });
+    } else {
+      setDutySchedules(data || []);
+    }
+  };
+
   // Effect to fetch data when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       fetchTrainingMaterials();
       fetchCivilComplaintsVectors();
+      fetchDutySchedules();
     }
   }, [isAuthenticated]);
 
@@ -682,6 +761,160 @@ const AdminMode = () => {
                       {isLoading ? '등록 중...' : '당직정보 등록'}
                     </Button>
                   </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>등록된 당직 정보</CardTitle>
+                  <CardDescription>
+                    현재 등록된 당직 스케줄 목록을 관리합니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {dutySchedules.length === 0 ? (
+                    <p className="text-muted-foreground">등록된 당직 정보가 없습니다.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {dutySchedules.map((duty) => (
+                        <div key={duty.id} className="border rounded-lg p-4">
+                          {editingDuty?.id === duty.id ? (
+                            <form onSubmit={handleDutyUpdate} className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>부서명</Label>
+                                  <Input
+                                    value={editingDuty.department_name}
+                                    onChange={(e) => setEditingDuty({
+                                      ...editingDuty,
+                                      department_name: e.target.value
+                                    })}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>시설명</Label>
+                                  <Input
+                                    value={editingDuty.duty_facility}
+                                    onChange={(e) => setEditingDuty({
+                                      ...editingDuty,
+                                      duty_facility: e.target.value
+                                    })}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>당직일</Label>
+                                  <Input
+                                    value={editingDuty.duty_day || ''}
+                                    onChange={(e) => setEditingDuty({
+                                      ...editingDuty,
+                                      duty_day: e.target.value
+                                    })}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>연락처</Label>
+                                  <Input
+                                    value={editingDuty.phone_number}
+                                    onChange={(e) => setEditingDuty({
+                                      ...editingDuty,
+                                      phone_number: e.target.value
+                                    })}
+                                    required
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button type="submit" size="sm" disabled={isLoading}>
+                                  {isLoading ? '저장 중...' : '저장'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingDuty(null)}
+                                >
+                                  취소
+                                </Button>
+                              </div>
+                            </form>
+                          ) : (
+                            <div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                <div>
+                                  <div className="text-sm font-medium text-muted-foreground">부서명</div>
+                                  <div className="font-medium">{duty.department_name}</div>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-muted-foreground">시설명</div>
+                                  <div className="font-medium">{duty.duty_facility}</div>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-muted-foreground">당직일</div>
+                                  <div className="font-medium">{duty.duty_day || '미지정'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-muted-foreground">연락처</div>
+                                  <div className="font-medium">{duty.phone_number}</div>
+                                </div>
+                              </div>
+                              <div className="text-sm text-muted-foreground mb-4">
+                                등록일: {new Date(duty.created_at).toLocaleDateString('ko-KR', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingDuty(duty)}
+                                  className="flex items-center gap-1"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                  수정
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="flex items-center gap-1"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      삭제
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>당직 정보 삭제</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        "{duty.department_name} - {duty.duty_facility}" 당직 정보를 삭제하시겠습니까?
+                                        이 작업은 되돌릴 수 없습니다.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>취소</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleDutyDelete(duty.id)}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        삭제
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
