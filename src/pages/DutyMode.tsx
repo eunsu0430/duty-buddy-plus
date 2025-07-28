@@ -432,7 +432,7 @@ ${complaintForm.description}
                   <Label htmlFor="complaint-type">민원 유형</Label>
                   <Input
                     id="complaint-type"
-                    placeholder="예: 소음 민원"
+                    placeholder="예: 정전 민원"
                     value={complaintForm.type}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, type: e.target.value }))}
                   />
@@ -441,16 +441,16 @@ ${complaintForm.description}
                   <Label htmlFor="complaint-location">발생 장소</Label>
                   <Input
                     id="complaint-location"
-                    placeholder="예: 101동 502호"
+                    placeholder="예: 당진시청"
                     value={complaintForm.location}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, location: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="complaint-reporter">신고자 (선택)</Label>
+                  <Label htmlFor="complaint-phone">신고자 번호</Label>
                   <Input
-                    id="complaint-reporter"
-                    placeholder="홍길동"
+                    id="complaint-phone"
+                    placeholder="010-1234-5678"
                     value={complaintForm.reporter}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, reporter: e.target.value }))}
                   />
@@ -459,7 +459,7 @@ ${complaintForm.description}
                   <Label htmlFor="complaint-description">상세 내용</Label>
                   <Textarea
                     id="complaint-description"
-                    placeholder="민원 내용을 자세히 입력해주세요..."
+                    placeholder="당진시청 2층 세무과 사무실에 오전 9시부터 정전이 발생하여 업무에 지장이 있습니다. 빠른 조치 부탁드립니다."
                     rows={4}
                     value={complaintForm.description}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, description: e.target.value }))}
