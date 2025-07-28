@@ -38,12 +38,6 @@ export type Database = {
         }
         Relationships: []
       }
-      civil_complaints_data: {
-        Row: {}
-        Insert: {}
-        Update: {}
-        Relationships: []
-      }
       civil_complaints_vectors: {
         Row: {
           content: string
@@ -74,34 +68,9 @@ export type Database = {
         }
         Relationships: []
       }
-      departments: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       duty_schedule: {
         Row: {
           created_at: string
-          department_id: string | null
           department_name: string
           duty_day: string | null
           duty_facility: string
@@ -111,7 +80,6 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          department_id?: string | null
           department_name: string
           duty_day?: string | null
           duty_facility: string
@@ -121,7 +89,6 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          department_id?: string | null
           department_name?: string
           duty_day?: string | null
           duty_facility?: string
@@ -129,15 +96,7 @@ export type Database = {
           phone_number?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "duty_schedule_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       training_materials: {
         Row: {

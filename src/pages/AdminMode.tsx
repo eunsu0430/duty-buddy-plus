@@ -25,11 +25,7 @@ const AdminMode = () => {
   const [isLoading, setIsLoading] = useState(false);
   
   // State for training materials and civil complaints data
-  const [trainingMaterials, setTrainingMaterials] = useState<Array<{
-    id: string;
-    title: string;
-    created_at: string;
-  }>>([]);
+  const [trainingMaterials, setTrainingMaterials] = useState<any[]>([]);
   const [civilComplaintsData, setCivilComplaintsData] = useState<any[]>([]);
   
   // State for duty schedules
@@ -177,22 +173,10 @@ const AdminMode = () => {
 
     setIsLoading(true);
     
-    try {
-      // For PDF files, we need to extract text content first
-      if (file.type === 'application/pdf') {
-        // For now, show that PDF files need to be converted to text
-        toast({
-          title: "PDF 파일 알림",
-          description: "PDF 파일은 텍스트로 변환 후 업로드해주세요. 현재는 텍스트 파일(.txt)만 지원됩니다.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const content = e.target?.result as string;
+     try {
+       const reader = new FileReader();
+       reader.onload = async (e) => {
+         const content = e.target?.result as string;
         
         const { error } = await supabase.functions.invoke('vectorize-content', {
           body: {
@@ -278,7 +262,7 @@ const AdminMode = () => {
         registration_info: `파일명: ${currentFilename}, 처리된 행 수: ${rows.length}`
       };
 
-      const { data: fileRecord, error: fileError } = await supabase
+      const { data: fileRecord, error: fileError } = await (supabase as any)
         .from('civil_complaints_data')
         .insert(fileRecordData)
         .select()
@@ -391,7 +375,7 @@ const AdminMode = () => {
 
   // Fetch civil complaints data
   const fetchCivilComplaintsData = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('civil_complaints_data')
       .select('*')
       .order('created_at', { ascending: false });
@@ -433,7 +417,7 @@ const AdminMode = () => {
 
   // Delete civil complaints data
   const handleDeleteCivilComplaintsData = async (dataId: string) => {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('civil_complaints_data')
       .delete()
       .eq('id', dataId);
@@ -460,9 +444,8 @@ const AdminMode = () => {
 
     try {
       await Promise.all([
-        supabase.from('civil_complaints_data').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        (supabase as any).from('civil_complaints_data').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('civil_complaints_vectors').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        supabase.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('duty_schedule').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('training_materials').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('training_vectors').delete().neq('id', '00000000-0000-0000-0000-000000000000')
@@ -680,17 +663,16 @@ const AdminMode = () => {
                 <CardHeader>
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
-                    텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
-                    PDF 파일은 현재 지원되지 않으니 텍스트로 변환 후 업로드해주세요.
+                    PDF 파일(.pdf) 또는 텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="training-file">교육자료 텍스트 파일</Label>
+                    <Label htmlFor="training-file">교육자료 파일</Label>
                     <Input 
                       id="training-file" 
                       type="file" 
-                      accept=".txt"
+                      accept=".pdf,.txt"
                       onChange={handleTrainingUpload}
                     />
                   </div>
