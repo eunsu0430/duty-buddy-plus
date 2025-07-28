@@ -82,7 +82,7 @@ export type Database = {
           metadata: Json | null
           title: string
           updated_at: string
-          vector: number[]
+          vector: string
         }
         Insert: {
           content: string
@@ -91,7 +91,7 @@ export type Database = {
           metadata?: Json | null
           title: string
           updated_at?: string
-          vector: number[]
+          vector: string
         }
         Update: {
           content?: string
@@ -100,7 +100,7 @@ export type Database = {
           metadata?: Json | null
           title?: string
           updated_at?: string
-          vector?: number[]
+          vector?: string
         }
         Relationships: []
       }
@@ -169,7 +169,7 @@ export type Database = {
           metadata: Json | null
           title: string
           updated_at: string
-          vector: number[]
+          vector: string
         }
         Insert: {
           content: string
@@ -178,7 +178,7 @@ export type Database = {
           metadata?: Json | null
           title: string
           updated_at?: string
-          vector: number[]
+          vector: string
         }
         Update: {
           content?: string
@@ -187,7 +187,7 @@ export type Database = {
           metadata?: Json | null
           title?: string
           updated_at?: string
-          vector?: number[]
+          vector?: string
         }
         Relationships: []
       }
