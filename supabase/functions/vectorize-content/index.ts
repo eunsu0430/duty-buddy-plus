@@ -7,45 +7,73 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// 간단한 텍스트 추출 함수
-function extractTextFromBinaryData(content: string): string {
+// OCR을 사용한 PDF 텍스트 추출 함수
+async function extractTextWithOCR(content: string, openaiApiKey: string): Promise<string> {
   try {
     // 이미 읽을 수 있는 텍스트인지 확인
-    if (/^[가-힣\s\w\W]*$/.test(content) && content.length > 10) {
+    if (/^[가-힣\s\w\W]*$/.test(content) && content.length > 10 && !content.startsWith('%PDF')) {
+      console.log('일반 텍스트 파일로 감지');
       return content;
     }
 
-    // PDF나 바이너리 데이터에서 텍스트 패턴 찾기
-    const textPatterns = [
-      /\(([^)]+)\)/g,  // PDF 텍스트 객체
-      />\s*([가-힣\w\s.,!?]+)\s*</g,  // XML/HTML 태그 내 텍스트
-      /\b([가-힣\w\s.,!?]{3,})\b/g,  // 일반적인 텍스트 패턴
-    ];
+    console.log('PDF 파일 감지, GPT-4 Vision으로 OCR 처리 시작');
     
-    let extractedText = '';
+    // PDF를 base64로 변환 (이미 base64 형태인 경우 그대로 사용)
+    let base64Content = content;
+    if (!content.startsWith('data:')) {
+      // PDF binary를 base64로 변환
+      base64Content = `data:application/pdf;base64,${btoa(content)}`;
+    }
+
+    // OpenAI Vision API를 사용하여 OCR 수행
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: '이 PDF 문서의 모든 텍스트를 정확하게 추출해주세요. 한글과 영어 모두 포함하여 원본 내용을 그대로 텍스트로 변환해주세요.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: base64Content
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI Vision API 오류: ${response.statusText}`);
+    }
+
+    const ocrData = await response.json();
+    const extractedText = ocrData.choices[0].message.content;
     
-    for (const pattern of textPatterns) {
-      let match;
-      while ((match = pattern.exec(content)) !== null) {
-        const text = match[1];
-        if (text && text.trim().length > 2 && /[가-힣a-zA-Z]/.test(text)) {
-          extractedText += text.trim() + ' ';
-        }
-      }
+    console.log('OCR 텍스트 추출 완료, 길이:', extractedText.length);
+    
+    if (!extractedText || extractedText.trim().length < 20) {
+      throw new Error('OCR로 추출된 텍스트가 충분하지 않습니다.');
     }
     
-    // 추출된 텍스트 정리
-    extractedText = extractedText.replace(/\s+/g, ' ').trim();
-    
-    if (extractedText.length > 20) {
-      return extractedText;
-    }
-    
-    throw new Error('텍스트를 추출할 수 없습니다.');
+    return extractedText.trim();
     
   } catch (error) {
-    console.error('텍스트 추출 오류:', error);
-    throw new Error('파일에서 텍스트를 추출할 수 없습니다.');
+    console.error('OCR 텍스트 추출 오류:', error);
+    throw new Error('OCR을 사용한 텍스트 추출에 실패했습니다. PDF 파일이 올바른지 확인해주세요.');
   }
 }
 
@@ -70,18 +98,18 @@ serve(async (req) => {
 
     console.log('Processing content for vectorization:', metadata?.title);
 
-    // 콘텐츠 처리 - 바이너리 데이터 확인
+    // 콘텐츠 처리 - OCR을 사용한 PDF 텍스트 추출
     let processedContent = content;
     
-    // 바이너리나 PDF 데이터인지 확인
+    // PDF 파일이거나 바이너리 데이터인지 확인
     if (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-') || content.length > 1000)) {
-      console.log('바이너리/PDF 파일 감지, 텍스트 추출 시작');
+      console.log('PDF 파일 감지, OCR로 텍스트 추출 시작');
       try {
-        processedContent = extractTextFromBinaryData(content);
-        console.log('텍스트 추출 완료, 길이:', processedContent.length);
-      } catch (textError) {
-        console.error('텍스트 추출 실패:', textError);
-        throw new Error('파일에서 텍스트를 추출할 수 없습니다. .txt 또는 일반 텍스트 파일로 다시 시도해주세요.');
+        processedContent = await extractTextWithOCR(content, openaiApiKey);
+        console.log('OCR 텍스트 추출 완료, 길이:', processedContent.length);
+      } catch (ocrError) {
+        console.error('OCR 텍스트 추출 실패:', ocrError);
+        throw new Error('PDF 파일에서 OCR로 텍스트를 추출할 수 없습니다. 파일이 올바른 PDF 형식인지 확인해주세요.');
       }
     }
 

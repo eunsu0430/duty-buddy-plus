@@ -177,9 +177,19 @@ const AdminMode = () => {
     setIsLoading(true);
     
      try {
-       const reader = new FileReader();
+      const reader = new FileReader();
        reader.onload = async (e) => {
-         const content = e.target?.result as string;
+         let content: string;
+         
+         // PDF 파일인 경우 ArrayBuffer를 base64로 변환
+         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+           const arrayBuffer = e.target?.result as ArrayBuffer;
+           const uint8Array = new Uint8Array(arrayBuffer);
+           const binaryString = uint8Array.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
+           content = btoa(binaryString);
+         } else {
+           content = e.target?.result as string;
+         }
         
         const { error } = await supabase.functions.invoke('vectorize-content', {
           body: {
@@ -209,7 +219,12 @@ const AdminMode = () => {
         setIsLoading(false);
       };
       
-      reader.readAsText(file);
+      // PDF 파일은 ArrayBuffer로, 텍스트 파일은 텍스트로 읽기
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file);
+      }
     } catch (error) {
       console.error('File reading error:', error);
       toast({
