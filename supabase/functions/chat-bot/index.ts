@@ -117,14 +117,14 @@ serve(async (req) => {
 - 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
 
 **유사민원사례:**
-SIMILAR_COMPLAINTS_DATA_START
-${JSON.stringify(similarComplaints || [])}
-SIMILAR_COMPLAINTS_DATA_END
+${similarComplaints && similarComplaints.length > 0 ? 
+  `총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다. 상세 내용은 아래 버튼을 클릭하여 확인하실 수 있습니다.` : 
+  '유사한 민원사례가 없습니다.'}
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
 - 교육자료에 기반해서만 처리방법을 설명하세요
-- 유사민원사례 부분은 정확히 위의 JSON 형식으로 포함해주세요
+- 유사민원사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요
 - 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
 
@@ -156,7 +156,11 @@ SIMILAR_COMPLAINTS_DATA_END
 
     console.log('AI 답변 생성 완료');
 
-    return new Response(JSON.stringify({ reply }), {
+    // 유사민원 데이터를 응답에 포함
+    return new Response(JSON.stringify({ 
+      reply,
+      similarComplaints: similarComplaints || []
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

@@ -138,45 +138,26 @@ const DutyMode = () => {
 
       if (error) throw error;
 
-      // 응답에서 유사민원 데이터 추출
-      let processedReply = data.reply;
+      // 응답에서 유사민원 데이터 처리
       let similarComplaints = [];
       
-      // SIMILAR_COMPLAINTS_DATA 부분 찾기
-      const startMarker = 'SIMILAR_COMPLAINTS_DATA_START';
-      const endMarker = 'SIMILAR_COMPLAINTS_DATA_END';
-      const startIndex = processedReply.indexOf(startMarker);
-      const endIndex = processedReply.indexOf(endMarker);
-      
-      if (startIndex !== -1 && endIndex !== -1) {
-        const jsonStart = startIndex + startMarker.length;
-        const jsonStr = processedReply.substring(jsonStart, endIndex).trim();
-        
-        try {
-          const rawComplaints = JSON.parse(jsonStr);
-          similarComplaints = rawComplaints.map((complaint: any, index: number) => ({
-            id: complaint.id || `complaint-${index}`,
-            summary: complaint.content ? complaint.content.substring(0, 80) + '...' : '내용 없음',
-            content: complaint.content || '상세 내용이 없습니다.',
-            serialNumber: complaint.metadata?.serialNumber || '정보없음',
-            department: complaint.metadata?.department || '정보없음',
-            status: complaint.metadata?.status || '정보없음',
-            date: complaint.metadata?.date || '정보없음',
-            similarity: (complaint.similarity * 100) || 0
-          }));
-          
-          // 응답에서 JSON 데이터 부분 제거
-          processedReply = processedReply.substring(0, startIndex) + 
-                          processedReply.substring(endIndex + endMarker.length);
-        } catch (e) {
-          console.error('유사민원 데이터 파싱 오류:', e);
-        }
+      if (data.similarComplaints && data.similarComplaints.length > 0) {
+        similarComplaints = data.similarComplaints.map((complaint: any, index: number) => ({
+          id: complaint.id || `complaint-${index}`,
+          summary: complaint.content ? complaint.content.substring(0, 80) + '...' : '내용 없음',
+          content: complaint.content || '상세 내용이 없습니다.',
+          serialNumber: complaint.metadata?.serialNumber || '정보없음',
+          department: complaint.metadata?.department || '정보없음',
+          status: complaint.metadata?.status || '정보없음',
+          date: complaint.metadata?.date || '정보없음',
+          similarity: (complaint.similarity * 100) || 0
+        }));
       }
 
       const systemMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'system',
-        content: processedReply.trim(),
+        content: data.reply,
         timestamp: new Date(),
         similarComplaints: similarComplaints.length > 0 ? similarComplaints : undefined
       };
