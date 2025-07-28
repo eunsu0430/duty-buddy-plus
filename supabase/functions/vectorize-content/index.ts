@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
@@ -7,45 +8,73 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// 간단한 텍스트 추출 함수
-function extractTextFromBinaryData(content: string): string {
+// PDF 텍스트 추출 함수 (GPT-4o-mini 사용)
+async function extractTextFromPDF(content: string, metadata: any): Promise<string> {
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  
+  if (!openaiApiKey) {
+    throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+  }
+
+  console.log('GPT-4o-mini를 사용하여 PDF 텍스트 추출 시작');
+
   try {
-    // 이미 읽을 수 있는 텍스트인지 확인
-    if (/^[가-힣\s\w\W]*$/.test(content) && content.length > 10) {
-      return content;
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `당신은 PDF 바이너리 데이터에서 텍스트를 추출하는 전문가입니다. 
+            제공된 바이너리 데이터를 분석하여 한국어 텍스트를 추출하고 정리해주세요.
+            
+            다음 규칙을 따라주세요:
+            1. 의미 있는 한국어 텍스트만 추출
+            2. 중복된 내용 제거
+            3. 문장 구조 정리
+            4. 특수문자나 인코딩 오류 수정
+            5. 당직근무 관련 내용이면 더 자세히 추출
+            
+            추출된 텍스트만 반환해주세요.`
+          },
+          {
+            role: 'user',
+            content: `다음 PDF 바이너리 데이터에서 텍스트를 추출해주세요:
+            파일명: ${metadata?.filename || 'unknown'}
+            제목: ${metadata?.title || 'unknown'}
+            
+            바이너리 데이터 (첫 2000자):
+            ${content.substring(0, 2000)}`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API 오류: ${response.statusText}`);
     }
 
-    // PDF나 바이너리 데이터에서 텍스트 패턴 찾기
-    const textPatterns = [
-      /\(([^)]+)\)/g,  // PDF 텍스트 객체
-      />\s*([가-힣\w\s.,!?]+)\s*</g,  // XML/HTML 태그 내 텍스트
-      /\b([가-힣\w\s.,!?]{3,})\b/g,  // 일반적인 텍스트 패턴
-    ];
+    const data = await response.json();
+    const extractedText = data.choices[0].message.content;
     
-    let extractedText = '';
+    console.log('GPT-4o-mini 텍스트 추출 완료, 길이:', extractedText.length);
     
-    for (const pattern of textPatterns) {
-      let match;
-      while ((match = pattern.exec(content)) !== null) {
-        const text = match[1];
-        if (text && text.trim().length > 2 && /[가-힣a-zA-Z]/.test(text)) {
-          extractedText += text.trim() + ' ';
-        }
-      }
+    if (!extractedText || extractedText.trim().length < 50) {
+      throw new Error('추출된 텍스트가 너무 짧습니다.');
     }
     
-    // 추출된 텍스트 정리
-    extractedText = extractedText.replace(/\s+/g, ' ').trim();
-    
-    if (extractedText.length > 20) {
-      return extractedText;
-    }
-    
-    throw new Error('텍스트를 추출할 수 없습니다.');
+    return extractedText.trim();
     
   } catch (error) {
-    console.error('텍스트 추출 오류:', error);
-    throw new Error('파일에서 텍스트를 추출할 수 없습니다.');
+    console.error('GPT-4o-mini 텍스트 추출 오류:', error);
+    throw new Error('PDF 텍스트 추출에 실패했습니다: ' + error.message);
   }
 }
 
@@ -70,18 +99,18 @@ serve(async (req) => {
 
     console.log('Processing content for vectorization:', metadata?.title);
 
-    // 콘텐츠 처리 - 바이너리 데이터 확인
+    // 콘텐츠 처리
     let processedContent = content;
     
-    // 바이너리나 PDF 데이터인지 확인
-    if (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-') || content.length > 1000)) {
-      console.log('바이너리/PDF 파일 감지, 텍스트 추출 시작');
+    // PDF 파일인지 확인
+    if (metadata?.type === 'application/pdf' || metadata?.filename?.endsWith('.pdf') || 
+        (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-')))) {
+      console.log('PDF 파일 감지, GPT-4o-mini로 텍스트 추출 시작');
       try {
-        processedContent = extractTextFromBinaryData(content);
-        console.log('텍스트 추출 완료, 길이:', processedContent.length);
-      } catch (textError) {
-        console.error('텍스트 추출 실패:', textError);
-        throw new Error('파일에서 텍스트를 추출할 수 없습니다. .txt 또는 일반 텍스트 파일로 다시 시도해주세요.');
+        processedContent = await extractTextFromPDF(content, metadata);
+      } catch (extractError) {
+        console.error('PDF 텍스트 추출 실패:', extractError);
+        throw new Error('PDF 파일에서 텍스트를 추출할 수 없습니다: ' + extractError.message);
       }
     }
 
@@ -129,7 +158,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.' 
+      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.',
+      extractedLength: processedContent.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
