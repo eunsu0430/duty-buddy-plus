@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,7 @@ const DutyMode = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDutySchedules();
@@ -263,7 +265,7 @@ ${complaintForm.description}
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
-              onClick={() => window.history.back()}
+              onClick={() => navigate(-1)}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
