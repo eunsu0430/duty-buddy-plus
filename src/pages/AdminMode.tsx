@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2 } from "lucide-react";
+import * as XLSX from 'xlsx';
 
 const AdminMode = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -158,7 +159,7 @@ const AdminMode = () => {
     }
   };
 
-  // Civil complaints upload handler
+  // Civil complaints upload handler (Excel processing)
   const handleCivilComplaintsUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -166,44 +167,98 @@ const AdminMode = () => {
     setIsLoading(true);
     
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const content = e.target?.result as string;
-        
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      // Extract headers and data
+      const headers = jsonData[0] as string[];
+      const rows = jsonData.slice(1) as any[][];
+
+      // Find column indices for required fields
+      const columnMap = {
+        serialNumber: headers.findIndex(h => h?.includes('일련번호') || h?.includes('번호')),
+        date: headers.findIndex(h => h?.includes('일자') || h?.includes('날짜')),
+        complaintContent: headers.findIndex(h => h?.includes('민원내용') || h?.includes('내용')),
+        actionContent: headers.findIndex(h => h?.includes('조치내용') || h?.includes('조치')),
+        department: headers.findIndex(h => h?.includes('처리부서') || h?.includes('부서')),
+        isSimpleInquiry: headers.findIndex(h => h?.includes('단순문의') || h?.includes('문의')),
+        status: headers.findIndex(h => h?.includes('처리상태') || h?.includes('상태')),
+        completionDate: headers.findIndex(h => h?.includes('처리완료') || h?.includes('완료'))
+      };
+
+      // Process each row and create content for vectorization
+      let processedCount = 0;
+      for (const row of rows) {
+        if (row.length === 0) continue; // Skip empty rows
+
+        const data = {
+          serialNumber: columnMap.serialNumber >= 0 ? row[columnMap.serialNumber] : '',
+          date: columnMap.date >= 0 ? row[columnMap.date] : '',
+          complaintContent: columnMap.complaintContent >= 0 ? row[columnMap.complaintContent] : '',
+          actionContent: columnMap.actionContent >= 0 ? row[columnMap.actionContent] : '',
+          department: columnMap.department >= 0 ? row[columnMap.department] : '',
+          isSimpleInquiry: columnMap.isSimpleInquiry >= 0 ? row[columnMap.isSimpleInquiry] : '',
+          status: columnMap.status >= 0 ? row[columnMap.status] : '',
+          completionDate: columnMap.completionDate >= 0 ? row[columnMap.completionDate] : ''
+        };
+
+        // Create structured content for vectorization
+        const content = `
+민원번호: ${data.serialNumber}
+접수일자: ${data.date}
+민원내용: ${data.complaintContent}
+조치내용: ${data.actionContent}
+처리부서: ${data.department}
+단순문의여부: ${data.isSimpleInquiry}
+처리상태: ${data.status}
+처리완료날짜: ${data.completionDate}
+        `.trim();
+
+        // Send to vectorization function
         const { error } = await supabase.functions.invoke('vectorize-civil-complaints', {
           body: {
             content: content,
             metadata: {
-              title: file.name,
-              fileType: file.type,
+              title: `민원데이터_${data.serialNumber || processedCount + 1}`,
+              serialNumber: data.serialNumber,
+              date: data.date,
+              department: data.department,
+              status: data.status,
               uploadedAt: new Date().toISOString()
             }
           }
         });
 
         if (error) {
-          console.error('Civil complaints upload error:', error);
-          toast({
-            title: "오류",
-            description: "민원데이터 업로드에 실패했습니다.",
-            variant: "destructive",
-          });
+          console.error(`Error processing row ${processedCount + 1}:`, error);
         } else {
-          toast({
-            title: "성공",
-            description: "민원데이터가 성공적으로 업로드되고 벡터화되었습니다.",
-          });
-          fetchCivilComplaintsVectors();
+          processedCount++;
         }
-        setIsLoading(false);
-      };
-      
-      reader.readAsText(file);
+      }
+
+      if (processedCount > 0) {
+        toast({
+          title: "성공",
+          description: `${processedCount}건의 민원데이터가 성공적으로 업로드되고 벡터화되었습니다.`,
+        });
+        fetchCivilComplaintsVectors();
+      } else {
+        toast({
+          title: "오류",
+          description: "처리된 민원데이터가 없습니다. 파일 형식을 확인해주세요.",
+          variant: "destructive",
+        });
+      }
+
+      setIsLoading(false);
     } catch (error) {
-      console.error('File reading error:', error);
+      console.error('Excel processing error:', error);
       toast({
         title: "오류",
-        description: "파일 읽기에 실패했습니다.",
+        description: "Excel 파일 처리 중 오류가 발생했습니다.",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -438,16 +493,17 @@ const AdminMode = () => {
                 <CardHeader>
                   <CardTitle>민원데이터 업로드</CardTitle>
                   <CardDescription>
-                    텍스트 파일을 업로드하여 민원데이터를 벡터화하고 등록합니다.
+                    Excel 파일(.xls, .xlsx)을 업로드하여 민원데이터를 벡터화하고 등록합니다.
+                    일련번호, 일자, 민원내용, 조치내용, 처리부서, 단순문의여부, 처리상태, 처리완료날짜 컬럼이 포함되어야 합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="civil-complaints-file">민원데이터 파일</Label>
+                    <Label htmlFor="civil-complaints-file">민원데이터 Excel 파일</Label>
                     <Input 
                       id="civil-complaints-file" 
                       type="file" 
-                      accept=".txt,.csv,.json"
+                      accept=".xls,.xlsx"
                       onChange={handleCivilComplaintsUpload}
                     />
                   </div>
@@ -500,16 +556,16 @@ const AdminMode = () => {
                 <CardHeader>
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
-                    교육자료를 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    PDF 파일을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="training-file">교육자료 파일</Label>
+                    <Label htmlFor="training-file">교육자료 PDF 파일</Label>
                     <Input 
                       id="training-file" 
                       type="file" 
-                      accept=".txt,.pdf,.doc,.docx,.hwp"
+                      accept=".pdf"
                       onChange={handleTrainingUpload}
                     />
                   </div>
