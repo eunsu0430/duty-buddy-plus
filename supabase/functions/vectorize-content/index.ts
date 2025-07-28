@@ -8,17 +8,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF 텍스트 추출 함수 (GPT-4o-mini 사용)
-async function extractTextFromPDF(content: string, metadata: any): Promise<string> {
+// OCR 텍스트 추출 함수 (GPT-4 Vision 사용)
+async function extractTextWithOCR(content: string, metadata: any): Promise<string> {
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   
   if (!openaiApiKey) {
     throw new Error('OpenAI API 키가 설정되지 않았습니다.');
   }
 
-  console.log('GPT-4o-mini를 사용하여 PDF 텍스트 추출 시작');
+  console.log('GPT-4 Vision을 사용하여 OCR 텍스트 추출 시작');
 
   try {
+    // PDF 바이너리 데이터를 base64로 변환 (이미지로 처리)
+    const base64Content = btoa(content);
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -26,34 +29,42 @@ async function extractTextFromPDF(content: string, metadata: any): Promise<strin
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
-            content: `당신은 PDF 바이너리 데이터에서 텍스트를 추출하는 전문가입니다. 
-            제공된 바이너리 데이터를 분석하여 한국어 텍스트를 추출하고 정리해주세요.
+            content: `당신은 OCR 전문가입니다. 이미지나 문서에서 한국어 텍스트를 정확하게 읽고 추출해주세요.
             
             다음 규칙을 따라주세요:
-            1. 의미 있는 한국어 텍스트만 추출
-            2. 중복된 내용 제거
-            3. 문장 구조 정리
-            4. 특수문자나 인코딩 오류 수정
-            5. 당직근무 관련 내용이면 더 자세히 추출
+            1. 모든 한국어 텍스트를 정확하게 읽어주세요
+            2. 표, 목록, 단락 구조를 유지해주세요
+            3. 특수문자나 기호도 포함해주세요
+            4. 당직근무, 민원처리 관련 내용은 특히 자세히 읽어주세요
+            5. 읽을 수 없는 부분은 [읽을 수 없음]으로 표시해주세요
             
             추출된 텍스트만 반환해주세요.`
           },
           {
             role: 'user',
-            content: `다음 PDF 바이너리 데이터에서 텍스트를 추출해주세요:
-            파일명: ${metadata?.filename || 'unknown'}
-            제목: ${metadata?.title || 'unknown'}
-            
-            바이너리 데이터 (첫 2000자):
-            ${content.substring(0, 2000)}`
+            content: [
+              {
+                type: 'text',
+                text: `다음 문서에서 OCR로 텍스트를 추출해주세요:
+                파일명: ${metadata?.filename || 'unknown'}
+                제목: ${metadata?.title || 'unknown'}`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64Content.substring(0, 10000)}`,
+                  detail: 'high'
+                }
+              }
+            ]
           }
         ],
         temperature: 0.1,
-        max_tokens: 2000,
+        max_tokens: 2500,
       }),
     });
 
@@ -64,17 +75,17 @@ async function extractTextFromPDF(content: string, metadata: any): Promise<strin
     const data = await response.json();
     const extractedText = data.choices[0].message.content;
     
-    console.log('GPT-4o-mini 텍스트 추출 완료, 길이:', extractedText.length);
+    console.log('GPT-4 Vision OCR 텍스트 추출 완료, 길이:', extractedText.length);
     
     if (!extractedText || extractedText.trim().length < 50) {
-      throw new Error('추출된 텍스트가 너무 짧습니다.');
+      throw new Error('OCR로 추출된 텍스트가 너무 짧습니다.');
     }
     
     return extractedText.trim();
     
   } catch (error) {
-    console.error('GPT-4o-mini 텍스트 추출 오류:', error);
-    throw new Error('PDF 텍스트 추출에 실패했습니다: ' + error.message);
+    console.error('GPT-4 Vision OCR 추출 오류:', error);
+    throw new Error('OCR 텍스트 추출에 실패했습니다: ' + error.message);
   }
 }
 
@@ -105,12 +116,12 @@ serve(async (req) => {
     // PDF 파일인지 확인
     if (metadata?.type === 'application/pdf' || metadata?.filename?.endsWith('.pdf') || 
         (typeof content === 'string' && (content.startsWith('%PDF') || content.includes('PDF-')))) {
-      console.log('PDF 파일 감지, GPT-4o-mini로 텍스트 추출 시작');
+      console.log('PDF 파일 감지, GPT-4 Vision OCR로 텍스트 추출 시작');
       try {
-        processedContent = await extractTextFromPDF(content, metadata);
+        processedContent = await extractTextWithOCR(content, metadata);
       } catch (extractError) {
-        console.error('PDF 텍스트 추출 실패:', extractError);
-        throw new Error('PDF 파일에서 텍스트를 추출할 수 없습니다: ' + extractError.message);
+        console.error('OCR 텍스트 추출 실패:', extractError);
+        throw new Error('PDF 파일에서 OCR 텍스트를 추출할 수 없습니다: ' + extractError.message);
       }
     }
 
@@ -158,7 +169,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.',
+      message: '학습 자료가 OCR로 성공적으로 추출되어 벡터화되었습니다.',
       extractedLength: processedContent.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
