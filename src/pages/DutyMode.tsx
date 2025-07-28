@@ -301,9 +301,9 @@ ${complaintForm.description}
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 grid grid-cols-12 gap-4 p-4 max-w-7xl mx-auto w-full">
-        {/* Left Sidebar - Department List */}
-        <div className="col-span-3">
+      <div className="flex-1 flex gap-4 p-4 max-w-7xl mx-auto w-full h-[calc(100vh-112px)]">
+        {/* Left Sidebar - Department List (Fixed) */}
+        <div className="w-80 flex-shrink-0">
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -315,7 +315,7 @@ ${complaintForm.description}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[calc(100vh-220px)]">
+              <ScrollArea className="h-[calc(100vh-280px)]">
                 <div className="space-y-2 p-4">
                   {dutySchedules.map((duty) => (
                     <div
@@ -341,9 +341,9 @@ ${complaintForm.description}
         </div>
 
         {/* Center - Chat Interface */}
-        <div className={showComplaintForm ? "col-span-6" : "col-span-9"}>
+        <div className={`flex-1 ${showComplaintForm ? 'mr-4' : ''}`}>
           <Card className="h-full flex flex-col shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 flex-shrink-0">
               <CardTitle className="flex items-center gap-2 text-xl">
                 <MessageCircle className="w-6 h-6 text-primary" />
                 🤖 AI 민원 상담
@@ -352,7 +352,7 @@ ${complaintForm.description}
                 민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-0">
+            <CardContent className="flex-1 flex flex-col p-0 min-h-0">
               <ScrollArea className="flex-1 p-4">
                 <div className="space-y-4">
                   {chatMessages.map((message) => (
@@ -376,7 +376,7 @@ ${complaintForm.description}
                   ))}
                 </div>
               </ScrollArea>
-              <div className="border-t bg-card p-4">
+              <div className="border-t bg-card p-4 flex-shrink-0">
                 <div className="flex gap-3">
                   <Input
                     placeholder="🗣️ 민원 종류나 상황을 자세히 입력하세요... (예: 아파트 101동에서 밤 11시부터 계속 층간소음이 발생하고 있습니다)"
@@ -408,7 +408,7 @@ ${complaintForm.description}
 
         {/* Right Sidebar - Complaint Form Toggle */}
         {showComplaintForm && (
-          <div className="col-span-3">
+          <div className="w-80 flex-shrink-0">
             <Card className="h-full">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
