@@ -1,1 +1,17 @@
 project_id = "rlndmoxsnccurcfpxeai"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.chat-bot]
+verify_jwt = false
+
+[functions.weather-api]
+verify_jwt = false
+
+[functions.vectorize-content]
+verify_jwt = false

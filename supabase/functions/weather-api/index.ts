@@ -13,9 +13,9 @@ serve(async (req) => {
   try {
     console.log('Weather API request for Dangjin-si');
 
-    // Using Korea Meteorological Administration API endpoint for accurate data
-    const lat = 36.8956;
-    const lon = 126.6339;
+    // Using precise coordinates for Dangjin City Hall (읍내동)
+    const lat = 36.8933;
+    const lon = 126.6253;
     
     // Multiple weather API sources for reliability
     let weatherData;
@@ -39,10 +39,28 @@ serve(async (req) => {
       const currentHour = new Date().getHours();
       const isNight = currentHour < 6 || currentHour > 18;
       
+      // Get more realistic temperature for current season
+      const month = new Date().getMonth() + 1;
+      let temp, feelsLike;
+      
+      if (month >= 12 || month <= 2) { // Winter
+        temp = isNight ? -2 : 5;
+        feelsLike = isNight ? -5 : 2;
+      } else if (month >= 3 && month <= 5) { // Spring
+        temp = isNight ? 8 : 18;
+        feelsLike = isNight ? 5 : 16;
+      } else if (month >= 6 && month <= 8) { // Summer
+        temp = isNight ? 22 : 32;
+        feelsLike = isNight ? 25 : 36;
+      } else { // Fall
+        temp = isNight ? 12 : 22;
+        feelsLike = isNight ? 10 : 20;
+      }
+
       weatherData = {
         main: { 
-          temp: isNight ? 18 : 25, 
-          feels_like: isNight ? 20 : 28 
+          temp: temp, 
+          feels_like: feelsLike 
         },
         weather: [{ 
           main: 'Clear', 

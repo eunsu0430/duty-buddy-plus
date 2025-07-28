@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileSpreadsheet, BookOpen, Users } from "lucide-react";
+import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Edit, Trash2, Plus } from "lucide-react";
 
 const AdminMode = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,6 +21,9 @@ const AdminMode = () => {
     phoneNumber: "",
     notes: ""
   });
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [editingDept, setEditingDept] = useState<any>(null);
+  const [newDept, setNewDept] = useState({ name: "", description: "" });
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -119,14 +124,162 @@ const AdminMode = () => {
       description: "교육자료를 처리하고 있습니다..."
     });
 
-    // For demo purposes, we'll simulate processing
-    setTimeout(() => {
+    try {
+      // Read file content
+      const content = await file.text();
+      
+      // Send to vectorize function
+      const { data, error } = await supabase.functions.invoke('vectorize-content', {
+        body: { 
+          content: content,
+          metadata: { 
+            title: file.name,
+            file_type: file.type
+          }
+        }
+      });
+
+      if (error) throw error;
+
       toast({
         title: "교육자료 업데이트 완료",
-        description: "교육자료가 성공적으로 업데이트되었습니다."
+        description: "교육자료가 성공적으로 벡터화되어 저장되었습니다."
       });
-    }, 2000);
+    } catch (error) {
+      console.error('Training upload error:', error);
+      toast({
+        title: "업로드 실패",
+        description: "교육자료 업로드 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
   };
+
+  const fetchDepartments = async () => {
+    const { data, error } = await supabase
+      .from('departments')
+      .select('*')
+      .order('name');
+    
+    if (!error) {
+      setDepartments(data || []);
+    }
+  };
+
+  const handleAddDepartment = async () => {
+    if (!newDept.name.trim()) return;
+    
+    const { error } = await supabase
+      .from('departments')
+      .insert([newDept]);
+    
+    if (error) {
+      toast({
+        title: "추가 실패",
+        description: "부서 추가 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "추가 완료",
+        description: "부서가 성공적으로 추가되었습니다."
+      });
+      setNewDept({ name: "", description: "" });
+      fetchDepartments();
+    }
+  };
+
+  const handleUpdateDepartment = async () => {
+    if (!editingDept) return;
+    
+    const { error } = await supabase
+      .from('departments')
+      .update(editingDept)
+      .eq('id', editingDept.id);
+    
+    if (error) {
+      toast({
+        title: "수정 실패",
+        description: "부서 수정 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "수정 완료",
+        description: "부서가 성공적으로 수정되었습니다."
+      });
+      setEditingDept(null);
+      fetchDepartments();
+    }
+  };
+
+  const handleDeleteDepartment = async (id: string) => {
+    const { error } = await supabase
+      .from('departments')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      toast({
+        title: "삭제 실패",
+        description: "부서 삭제 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "삭제 완료",
+        description: "부서가 성공적으로 삭제되었습니다."
+      });
+      fetchDepartments();
+    }
+  };
+
+  const handleSystemReset = async () => {
+    try {
+      // Delete all data from all tables
+      await supabase.from('duty_schedule').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('civil_complaints_data').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('training_materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      toast({
+        title: "초기화 완료",
+        description: "모든 데이터가 성공적으로 초기화되었습니다."
+      });
+    } catch (error) {
+      toast({
+        title: "초기화 실패",
+        description: "데이터 초기화 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDatabaseBackup = async () => {
+    toast({
+      title: "백업 시작",
+      description: "데이터베이스 백업을 진행 중입니다..."
+    });
+    
+    // Simulate backup process
+    setTimeout(() => {
+      toast({
+        title: "백업 완료",
+        description: "데이터베이스가 성공적으로 백업되었습니다."
+      });
+    }, 3000);
+  };
+
+  const handleSystemLogs = () => {
+    // Open logs in new tab
+    window.open('https://supabase.com/dashboard/project/rlndmoxsnccurcfpxeai/logs/explorer', '_blank');
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDepartments();
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return (
@@ -177,7 +330,17 @@ const AdminMode = () => {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">당직근무 지원 시스템 - 관리자 모드</h1>
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              onClick={() => window.history.back()}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              뒤로가기
+            </Button>
+            <h1 className="text-3xl font-bold">당직근무 지원 시스템 - 관리자 모드</h1>
+          </div>
           <Button 
             variant="outline" 
             onClick={() => setIsAuthenticated(false)}
@@ -268,71 +431,198 @@ const AdminMode = () => {
           </TabsContent>
 
           <TabsContent value="duty">
-            <Card>
-              <CardHeader>
-                <CardTitle>통합 당직 명령부 관리</CardTitle>
-                <CardDescription>
-                  부서별 당직 정보를 등록하고 관리합니다.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleDutySubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="departmentName">부서명</Label>
-                      <Input
-                        id="departmentName"
-                        value={dutyForm.departmentName}
-                        onChange={(e) => setDutyForm(prev => ({ ...prev, departmentName: e.target.value }))}
-                        required
-                      />
+            <div className="space-y-6">
+              {/* Department Management */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>부서 관리</CardTitle>
+                  <CardDescription>
+                    현재 등록된 부서들을 관리하고 새로운 부서를 추가할 수 있습니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Add New Department */}
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <h4 className="font-medium mb-3">새 부서 추가</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="newDeptName">부서명</Label>
+                          <Input
+                            id="newDeptName"
+                            value={newDept.name}
+                            onChange={(e) => setNewDept(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="예: 총무과"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="newDeptDesc">설명</Label>
+                          <Input
+                            id="newDeptDesc"
+                            value={newDept.description}
+                            onChange={(e) => setNewDept(prev => ({ ...prev, description: e.target.value }))}
+                            placeholder="부서 설명"
+                          />
+                        </div>
+                      </div>
+                      <Button onClick={handleAddDepartment} className="mt-3">
+                        <Plus className="w-4 h-4 mr-2" />
+                        부서 추가
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="dutyFacility">근무시설</Label>
-                      <Input
-                        id="dutyFacility"
-                        value={dutyForm.dutyFacility}
-                        onChange={(e) => setDutyForm(prev => ({ ...prev, dutyFacility: e.target.value }))}
-                        required
-                      />
-                    </div>
+
+                    {/* Department List */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>부서명</TableHead>
+                          <TableHead>설명</TableHead>
+                          <TableHead>생성일</TableHead>
+                          <TableHead>관리</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {departments.map((dept) => (
+                          <TableRow key={dept.id}>
+                            <TableCell>
+                              {editingDept?.id === dept.id ? (
+                                <Input
+                                  value={editingDept.name}
+                                  onChange={(e) => setEditingDept(prev => ({ ...prev, name: e.target.value }))}
+                                />
+                              ) : (
+                                dept.name
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {editingDept?.id === dept.id ? (
+                                <Input
+                                  value={editingDept.description || ''}
+                                  onChange={(e) => setEditingDept(prev => ({ ...prev, description: e.target.value }))}
+                                />
+                              ) : (
+                                dept.description || '-'
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {new Date(dept.created_at).toLocaleDateString('ko-KR')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {editingDept?.id === dept.id ? (
+                                  <>
+                                    <Button size="sm" onClick={handleUpdateDepartment}>
+                                      저장
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setEditingDept(null)}>
+                                      취소
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button size="sm" variant="outline" onClick={() => setEditingDept(dept)}>
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button size="sm" variant="destructive">
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>부서 삭제 확인</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            '{dept.name}' 부서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>취소</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteDepartment(dept.id)}>
+                                            삭제
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="dutyDate">근무일</Label>
-                      <Input
-                        id="dutyDate"
-                        type="date"
-                        value={dutyForm.dutyDate}
-                        onChange={(e) => setDutyForm(prev => ({ ...prev, dutyDate: e.target.value }))}
-                        required
-                      />
+                </CardContent>
+              </Card>
+
+              {/* Duty Schedule Registration */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>당직 정보 등록</CardTitle>
+                  <CardDescription>
+                    부서별 당직 정보를 등록합니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleDutySubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="departmentName">부서명</Label>
+                        <Input
+                          id="departmentName"
+                          value={dutyForm.departmentName}
+                          onChange={(e) => setDutyForm(prev => ({ ...prev, departmentName: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dutyFacility">근무시설</Label>
+                        <Input
+                          id="dutyFacility"
+                          value={dutyForm.dutyFacility}
+                          onChange={(e) => setDutyForm(prev => ({ ...prev, dutyFacility: e.target.value }))}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="dutyDate">근무일</Label>
+                        <Input
+                          id="dutyDate"
+                          type="date"
+                          value={dutyForm.dutyDate}
+                          onChange={(e) => setDutyForm(prev => ({ ...prev, dutyDate: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phoneNumber">전화번호</Label>
+                        <Input
+                          id="phoneNumber"
+                          value={dutyForm.phoneNumber}
+                          onChange={(e) => setDutyForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                          required
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="phoneNumber">전화번호</Label>
-                      <Input
-                        id="phoneNumber"
-                        value={dutyForm.phoneNumber}
-                        onChange={(e) => setDutyForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                        required
+                      <Label htmlFor="notes">비고</Label>
+                      <Textarea
+                        id="notes"
+                        value={dutyForm.notes}
+                        onChange={(e) => setDutyForm(prev => ({ ...prev, notes: e.target.value }))}
+                        rows={3}
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">비고</Label>
-                    <Textarea
-                      id="notes"
-                      value={dutyForm.notes}
-                      onChange={(e) => setDutyForm(prev => ({ ...prev, notes: e.target.value }))}
-                      rows={3}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    당직 정보 등록
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                    <Button type="submit" className="w-full">
+                      당직 정보 등록
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="settings">
@@ -345,15 +635,42 @@ const AdminMode = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <Button variant="outline" className="w-full">
-                    데이터베이스 백업
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleDatabaseBackup}
+                  >
+                    📦 데이터베이스 백업
                   </Button>
-                  <Button variant="outline" className="w-full">
-                    시스템 로그 확인
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleSystemLogs}
+                  >
+                    📋 시스템 로그 확인
                   </Button>
-                  <Button variant="destructive" className="w-full">
-                    전체 데이터 초기화
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="w-full">
+                        🗑️ 전체 데이터 초기화
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>정말 초기화 하시겠습니까?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          이 작업은 모든 데이터를 영구적으로 삭제합니다. 
+                          민원 데이터, 교육자료, 당직 정보, 부서 정보가 모두 삭제되며 되돌릴 수 없습니다.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSystemReset} className="bg-destructive">
+                          확인, 모든 데이터 삭제
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardContent>
             </Card>

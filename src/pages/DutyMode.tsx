@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, MapPin, Calendar, FileText, Send, MessageCircle } from "lucide-react";
+import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft } from "lucide-react";
 
 interface DutySchedule {
   id: string;
@@ -260,9 +260,19 @@ ${complaintForm.description}
       {/* Header */}
       <div className="border-b bg-card/80 backdrop-blur-sm shadow-sm p-4">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            🏢 당직근무 지원 시스템 - 당직자 모드
-          </h1>
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              onClick={() => window.history.back()}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              뒤로가기
+            </Button>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              🏢 당직근무 지원 시스템 - 당직자 모드
+            </h1>
+          </div>
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
@@ -276,6 +286,14 @@ ${complaintForm.description}
             <div className="flex items-center gap-2">
               <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
+            <Button
+              onClick={() => setShowComplaintForm(!showComplaintForm)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              민원등록서식
+            </Button>
           </div>
         </div>
       </div>
@@ -458,17 +476,6 @@ ${complaintForm.description}
           </div>
         )}
 
-        {/* Floating Complaint Form Button */}
-        {!showComplaintForm && (
-          <div className="fixed bottom-6 right-6">
-            <Button
-              onClick={() => setShowComplaintForm(true)}
-              className="h-14 px-6 text-lg font-semibold bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent shadow-xl hover:shadow-2xl transition-all duration-300 rounded-full"
-            >
-              📝 민원 등록 서식
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Detail Dialog */}
