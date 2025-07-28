@@ -24,9 +24,9 @@ const AdminMode = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   
-  // State for training materials and civil complaints vectors
+  // State for training materials and civil complaints data
   const [trainingMaterials, setTrainingMaterials] = useState<any[]>([]);
-  const [civilComplaintsVectors, setCivilComplaintsVectors] = useState<any[]>([]);
+  const [civilComplaintsData, setCivilComplaintsData] = useState<any[]>([]);
   
   // State for duty schedules
   const [dutySchedules, setDutySchedules] = useState<any[]>([]);
@@ -303,7 +303,7 @@ const AdminMode = () => {
           title: "성공",
           description: `${processedCount}건의 민원데이터가 성공적으로 업로드되고 벡터화되었습니다.`,
         });
-        fetchCivilComplaintsVectors();
+        fetchCivilComplaintsData();
       } else {
         toast({
           title: "오류",
@@ -343,22 +343,22 @@ const AdminMode = () => {
     }
   };
 
-  // Fetch civil complaints vectors
-  const fetchCivilComplaintsVectors = async () => {
+  // Fetch civil complaints data
+  const fetchCivilComplaintsData = async () => {
     const { data, error } = await supabase
-      .from('civil_complaints_vectors')
+      .from('civil_complaints_data')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching civil complaints vectors:', error);
+      console.error('Error fetching civil complaints data:', error);
       toast({
         title: "오류",
-        description: "민원데이터 벡터 목록을 불러오는데 실패했습니다.",
+        description: "민원데이터 목록을 불러오는데 실패했습니다.",
         variant: "destructive",
       });
     } else {
-      setCivilComplaintsVectors(data || []);
+      setCivilComplaintsData(data || []);
     }
   };
 
@@ -385,15 +385,15 @@ const AdminMode = () => {
     }
   };
 
-  // Delete civil complaints vector
-  const handleDeleteCivilComplaintsVector = async (vectorId: string) => {
+  // Delete civil complaints data
+  const handleDeleteCivilComplaintsData = async (dataId: string) => {
     const { error } = await supabase
-      .from('civil_complaints_vectors')
+      .from('civil_complaints_data')
       .delete()
-      .eq('id', vectorId);
+      .eq('id', dataId);
 
     if (error) {
-      console.error('Error deleting civil complaints vector:', error);
+      console.error('Error deleting civil complaints data:', error);
       toast({
         title: "오류",
         description: "민원데이터 삭제에 실패했습니다.",
@@ -404,7 +404,7 @@ const AdminMode = () => {
         title: "성공",
         description: "민원데이터가 성공적으로 삭제되었습니다.",
       });
-      fetchCivilComplaintsVectors();
+      fetchCivilComplaintsData();
     }
   };
 
@@ -485,7 +485,7 @@ const AdminMode = () => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchTrainingMaterials();
-      fetchCivilComplaintsVectors();
+      fetchCivilComplaintsData();
       fetchDutySchedules();
     }
   }, [isAuthenticated]);
@@ -596,37 +596,39 @@ const AdminMode = () => {
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle>민원데이터 벡터 목록</CardTitle>
-                  <CardDescription>
-                    업로드된 민원데이터 벡터들을 관리합니다.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {civilComplaintsVectors.length === 0 ? (
-                      <p className="text-muted-foreground">업로드된 민원데이터가 없습니다.</p>
-                    ) : (
-                      civilComplaintsVectors.map((vector) => (
-                        <div key={vector.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <h4 className="font-medium">{vector.title}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              업로드 날짜: {new Date(vector.created_at).toLocaleDateString('ko-KR')}
-                            </p>
-                          </div>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteCivilComplaintsVector(vector.id)}
-                          >
-                            삭제
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </CardContent>
+                 <CardHeader>
+                   <CardTitle>업로드된 민원데이터 파일 목록</CardTitle>
+                   <CardDescription>
+                     업로드된 민원데이터 파일들을 관리합니다.
+                   </CardDescription>
+                 </CardHeader>
+                 <CardContent>
+                   <div className="space-y-2">
+                     {civilComplaintsData.length === 0 ? (
+                       <p className="text-muted-foreground">업로드된 민원데이터가 없습니다.</p>
+                     ) : (
+                       civilComplaintsData.map((data) => (
+                         <div key={data.id} className="flex items-center justify-between p-3 border rounded-lg">
+                           <div>
+                             <h4 className="font-medium">민원데이터 - {data.month_uploaded}월 {data.year_uploaded}년</h4>
+                             <div className="text-sm text-muted-foreground space-y-1">
+                               <p>처리방법: {data.processing_method}</p>
+                               <p>민원유형: {data.complaint_type}</p>
+                               <p>업로드 날짜: {new Date(data.created_at).toLocaleDateString('ko-KR')}</p>
+                             </div>
+                           </div>
+                           <Button
+                             variant="destructive"
+                             size="sm"
+                             onClick={() => handleDeleteCivilComplaintsData(data.id)}
+                           >
+                             삭제
+                           </Button>
+                         </div>
+                       ))
+                     )}
+                   </div>
+                 </CardContent>
               </Card>
             </TabsContent>
 
