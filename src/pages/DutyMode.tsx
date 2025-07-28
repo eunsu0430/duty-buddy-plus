@@ -45,19 +45,39 @@ const DutyMode = () => {
     reporter: ''
   });
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
-  const [weather, setWeather] = useState('맑음 22°C');
+  const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchDutySchedules();
+    fetchWeather();
     
     // Update time every minute
     const timer = setInterval(() => {
       setCurrentDateTime(new Date());
     }, 60000);
 
-    return () => clearInterval(timer);
+    // Update weather every 10 minutes
+    const weatherTimer = setInterval(fetchWeather, 600000);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(weatherTimer);
+    };
   }, []);
+
+  const fetchWeather = async () => {
+    try {
+      const response = await fetch('https://rlndmoxsnccurcfpxeai.supabase.co/functions/v1/weather-api');
+      if (response.ok) {
+        const weatherData = await response.json();
+        setWeather(weatherData);
+      }
+    } catch (error) {
+      console.error('날씨 정보를 가져오는데 실패했습니다:', error);
+    }
+  };
 
   const fetchDutySchedules = async () => {
     const { data, error } = await supabase
@@ -87,18 +107,52 @@ const DutyMode = () => {
     };
 
     setChatMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
 
-    // Simulate AI response based on complaint type
-    setTimeout(() => {
-      const systemResponse = generateSystemResponse(currentMessage);
+    try {
+      // Get context from duty schedules for better AI responses
+      const context = dutySchedules.map(duty => 
+        `${duty.department_name}: ${duty.phone_number} (${duty.duty_facility})`
+      ).join(', ');
+
+      const { data, error } = await supabase.functions.invoke('chat-bot', {
+        body: { 
+          message: currentMessage,
+          context: `당직 부서 정보: ${context}`
+        }
+      });
+
+      if (error) throw error;
+
       const systemMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'system',
-        content: systemResponse,
+        content: data.reply,
+        timestamp: new Date()
+      };
+      
+      setChatMessages(prev => [...prev, systemMessage]);
+    } catch (error) {
+      console.error('AI 응답 오류:', error);
+      
+      // Fallback to local response
+      const fallbackResponse = generateSystemResponse(currentMessage);
+      const systemMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'system',
+        content: fallbackResponse,
         timestamp: new Date()
       };
       setChatMessages(prev => [...prev, systemMessage]);
-    }, 1000);
+      
+      toast({
+        title: "AI 연결 오류",
+        description: "기본 응답으로 처리되었습니다. 인터넷 연결을 확인해주세요.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
 
     setCurrentMessage('');
   };
@@ -217,7 +271,7 @@ ${complaintForm.description}
               })}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span>🌤️ {weather}</span>
+              <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
           </div>
         </div>
@@ -305,10 +359,15 @@ ${complaintForm.description}
                     placeholder="민원 종류나 상황을 입력하세요... (예: 층간소음, 쓰레기 문제, 시설 고장 등)"
                     value={currentMessage}
                     onChange={(e) => setCurrentMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
+                    disabled={isLoading}
                   />
-                  <Button onClick={handleSendMessage}>
-                    <Send className="w-4 h-4" />
+                  <Button onClick={handleSendMessage} disabled={isLoading}>
+                    {isLoading ? (
+                      <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>
