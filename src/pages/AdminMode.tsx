@@ -25,7 +25,11 @@ const AdminMode = () => {
   const [isLoading, setIsLoading] = useState(false);
   
   // State for training materials and civil complaints data
-  const [trainingMaterials, setTrainingMaterials] = useState<any[]>([]);
+  const [trainingMaterials, setTrainingMaterials] = useState<Array<{
+    id: string;
+    title: string;
+    created_at: string;
+  }>>([]);
   const [civilComplaintsData, setCivilComplaintsData] = useState<any[]>([]);
   
   // State for duty schedules
@@ -174,6 +178,18 @@ const AdminMode = () => {
     setIsLoading(true);
     
     try {
+      // For PDF files, we need to extract text content first
+      if (file.type === 'application/pdf') {
+        // For now, show that PDF files need to be converted to text
+        toast({
+          title: "PDF 파일 알림",
+          description: "PDF 파일은 텍스트로 변환 후 업로드해주세요. 현재는 텍스트 파일(.txt)만 지원됩니다.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         const content = e.target?.result as string;
@@ -250,6 +266,35 @@ const AdminMode = () => {
 
       // Process each row and create content for vectorization
       let processedCount = 0;
+      const currentFilename = file.name;
+      
+      // First, store the file information in civil_complaints_data
+      const fileRecordData = {
+        filename: currentFilename,
+        processing_method: '벡터화 처리',
+        complaint_type: 'Excel 업로드',
+        month_uploaded: new Date().getMonth() + 1,
+        year_uploaded: new Date().getFullYear(),
+        registration_info: `파일명: ${currentFilename}, 처리된 행 수: ${rows.length}`
+      };
+
+      const { data: fileRecord, error: fileError } = await supabase
+        .from('civil_complaints_data')
+        .insert(fileRecordData)
+        .select()
+        .single();
+
+      if (fileError) {
+        console.error('Error storing file record:', fileError);
+        toast({
+          title: "오류",
+          description: "파일 정보 저장에 실패했습니다.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       for (const row of rows) {
         if (row.length === 0) continue; // Skip empty rows
 
@@ -286,6 +331,7 @@ const AdminMode = () => {
               date: data.date,
               department: data.department,
               status: data.status,
+              filename: currentFilename,
               uploadedAt: new Date().toISOString()
             }
           }
@@ -358,7 +404,7 @@ const AdminMode = () => {
         variant: "destructive",
       });
     } else {
-      setCivilComplaintsData(data || []);
+      setCivilComplaintsData((data as any) || []);
     }
   };
 
@@ -387,24 +433,28 @@ const AdminMode = () => {
 
   // Delete civil complaints data
   const handleDeleteCivilComplaintsData = async (dataId: string) => {
-    const { error } = await supabase
-      .from('civil_complaints_data')
-      .delete()
-      .eq('id', dataId);
+    try {
+      const result = await supabase
+        .from('civil_complaints_data')
+        .delete()
+        .eq('id', dataId);
 
-    if (error) {
-      console.error('Error deleting civil complaints data:', error);
-      toast({
-        title: "오류",
-        description: "민원데이터 삭제에 실패했습니다.",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "성공",
-        description: "민원데이터가 성공적으로 삭제되었습니다.",
-      });
-      fetchCivilComplaintsData();
+      if (error) {
+        console.error('Error deleting civil complaints data:', error);
+        toast({
+          title: "오류",
+          description: "민원데이터 삭제에 실패했습니다.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "성공",
+          description: "민원데이터가 성공적으로 삭제되었습니다.",
+        });
+        fetchCivilComplaintsData();
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
     }
   };
 
@@ -605,14 +655,15 @@ const AdminMode = () => {
                      ) : (
                        civilComplaintsData.map((data) => (
                          <div key={data.id} className="flex items-center justify-between p-3 border rounded-lg">
-                           <div>
-                             <h4 className="font-medium">민원데이터 - {data.month_uploaded}월 {data.year_uploaded}년</h4>
-                             <div className="text-sm text-muted-foreground space-y-1">
-                               <p>처리방법: {data.processing_method}</p>
-                               <p>민원유형: {data.complaint_type}</p>
-                               <p>업로드 날짜: {new Date(data.created_at).toLocaleDateString('ko-KR')}</p>
-                             </div>
-                           </div>
+                            <div>
+                              <h4 className="font-medium">{data.filename || `민원데이터_${data.id.slice(0,8)}`}</h4>
+                              <div className="text-sm text-muted-foreground space-y-1">
+                                <p>처리방법: {data.processing_method}</p>
+                                <p>민원유형: {data.complaint_type}</p>
+                                <p>업로드 날짜: {new Date(data.created_at).toLocaleDateString('ko-KR')}</p>
+                                {data.registration_info && <p>세부정보: {data.registration_info}</p>}
+                              </div>
+                            </div>
                            <Button
                              variant="destructive"
                              size="sm"
@@ -633,16 +684,17 @@ const AdminMode = () => {
                 <CardHeader>
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
-                    PDF 파일을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    PDF 파일은 현재 지원되지 않으니 텍스트로 변환 후 업로드해주세요.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="training-file">교육자료 PDF 파일</Label>
+                    <Label htmlFor="training-file">교육자료 텍스트 파일</Label>
                     <Input 
                       id="training-file" 
                       type="file" 
-                      accept=".pdf"
+                      accept=".txt"
                       onChange={handleTrainingUpload}
                     />
                   </div>
@@ -959,7 +1011,6 @@ const AdminMode = () => {
                               다음 데이터들이 모두 삭제됩니다:
                             </p>
                             <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              
                               <li>민원데이터</li>
                               <li>민원데이터 벡터</li>
                               <li>부서 정보</li>

@@ -39,36 +39,9 @@ export type Database = {
         Relationships: []
       }
       civil_complaints_data: {
-        Row: {
-          complaint_type: string
-          created_at: string
-          id: string
-          month_uploaded: number
-          processing_method: string
-          registration_info: string | null
-          updated_at: string
-          year_uploaded: number
-        }
-        Insert: {
-          complaint_type: string
-          created_at?: string
-          id?: string
-          month_uploaded: number
-          processing_method: string
-          registration_info?: string | null
-          updated_at?: string
-          year_uploaded: number
-        }
-        Update: {
-          complaint_type?: string
-          created_at?: string
-          id?: string
-          month_uploaded?: number
-          processing_method?: string
-          registration_info?: string | null
-          updated_at?: string
-          year_uploaded?: number
-        }
+        Row: {}
+        Insert: {}
+        Update: {}
         Relationships: []
       }
       civil_complaints_vectors: {
