@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { SimilarComplaintsButtons } from "@/components/SimilarComplaintsButtons";
 import { supabase } from "@/integrations/supabase/client";
 import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft } from "lucide-react";
 
@@ -25,6 +26,16 @@ interface Message {
   type: 'user' | 'system';
   content: string;
   timestamp: Date;
+  similarComplaints?: Array<{
+    id: string;
+    summary: string;
+    content: string;
+    serialNumber: string;
+    department: string;
+    status: string;
+    date: string;
+    similarity: number;
+  }>;
 }
 
 const DutyMode = () => {
@@ -127,11 +138,47 @@ const DutyMode = () => {
 
       if (error) throw error;
 
+      // 응답에서 유사민원 데이터 추출
+      let processedReply = data.reply;
+      let similarComplaints = [];
+      
+      // SIMILAR_COMPLAINTS_DATA 부분 찾기
+      const startMarker = 'SIMILAR_COMPLAINTS_DATA_START';
+      const endMarker = 'SIMILAR_COMPLAINTS_DATA_END';
+      const startIndex = processedReply.indexOf(startMarker);
+      const endIndex = processedReply.indexOf(endMarker);
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        const jsonStart = startIndex + startMarker.length;
+        const jsonStr = processedReply.substring(jsonStart, endIndex).trim();
+        
+        try {
+          const rawComplaints = JSON.parse(jsonStr);
+          similarComplaints = rawComplaints.map((complaint: any, index: number) => ({
+            id: complaint.id || `complaint-${index}`,
+            summary: complaint.content ? complaint.content.substring(0, 80) + '...' : '내용 없음',
+            content: complaint.content || '상세 내용이 없습니다.',
+            serialNumber: complaint.metadata?.serialNumber || '정보없음',
+            department: complaint.metadata?.department || '정보없음',
+            status: complaint.metadata?.status || '정보없음',
+            date: complaint.metadata?.date || '정보없음',
+            similarity: (complaint.similarity * 100) || 0
+          }));
+          
+          // 응답에서 JSON 데이터 부분 제거
+          processedReply = processedReply.substring(0, startIndex) + 
+                          processedReply.substring(endIndex + endMarker.length);
+        } catch (e) {
+          console.error('유사민원 데이터 파싱 오류:', e);
+        }
+      }
+
       const systemMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'system',
-        content: data.reply,
-        timestamp: new Date()
+        content: processedReply.trim(),
+        timestamp: new Date(),
+        similarComplaints: similarComplaints.length > 0 ? similarComplaints : undefined
       };
       
       setChatMessages(prev => [...prev, systemMessage]);
@@ -265,11 +312,11 @@ ${complaintForm.description}
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
-              onClick={() => navigate(-1)}
+              onClick={() => navigate("/")}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              뒤로가기
+              홈으로
             </Button>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               🏢 당직근무 지원 시스템 - 당직자 모드
@@ -368,6 +415,9 @@ ${complaintForm.description}
                         }`}
                       >
                         <div className="whitespace-pre-wrap">{message.content}</div>
+                        {message.type === 'system' && message.similarComplaints && (
+                          <SimilarComplaintsButtons complaints={message.similarComplaints} />
+                        )}
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString('ko-KR')}
                         </div>

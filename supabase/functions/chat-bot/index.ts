@@ -111,27 +111,24 @@ serve(async (req) => {
 
     // 7. AI에게 답변 요청
     const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 
-
 사용자의 질문에 대해 다음과 같은 형식으로 답변해주세요:
 
-**처리 방법:**
+**처리방법:**
 - 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
 
 **유사민원사례:**
-- 민원번호: [민원번호]
-- 내용: [민원 내용 요약]  
-- 처리부서: [담당 부서]
-- 처리상태: [처리 상태]
-- 날짜: [처리 날짜]
+SIMILAR_COMPLAINTS_DATA_START
+${JSON.stringify(similarComplaints || [])}
+SIMILAR_COMPLAINTS_DATA_END
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
 - 교육자료에 기반해서만 처리방법을 설명하세요
-- 민원사례는 제공된 형식을 정확히 따라주세요
+- 유사민원사례 부분은 정확히 위의 JSON 형식으로 포함해주세요
 - 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
 
-제공된 정보:${trainingContext}${complaintCases}${dutyInfo}`;
+제공된 정보:${trainingContext}${dutyInfo}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
