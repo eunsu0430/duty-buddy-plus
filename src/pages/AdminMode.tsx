@@ -414,7 +414,6 @@ const AdminMode = () => {
 
     try {
       await Promise.all([
-        supabase.from('admin_users').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('civil_complaints_data').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('civil_complaints_vectors').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
@@ -526,9 +525,6 @@ const AdminMode = () => {
                 로그인
               </Button>
             </form>
-            <div className="mt-4 text-sm text-muted-foreground text-center">
-              데모 계정: admin / admin123
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -963,7 +959,7 @@ const AdminMode = () => {
                               다음 데이터들이 모두 삭제됩니다:
                             </p>
                             <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              <li>관리자 계정 정보</li>
+                              
                               <li>민원데이터</li>
                               <li>민원데이터 벡터</li>
                               <li>부서 정보</li>
