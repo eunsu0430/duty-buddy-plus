@@ -433,28 +433,24 @@ const AdminMode = () => {
 
   // Delete civil complaints data
   const handleDeleteCivilComplaintsData = async (dataId: string) => {
-    try {
-      const result = await supabase
-        .from('civil_complaints_data')
-        .delete()
-        .eq('id', dataId);
+    const { error } = await supabase
+      .from('civil_complaints_data')
+      .delete()
+      .eq('id', dataId);
 
-      if (error) {
-        console.error('Error deleting civil complaints data:', error);
-        toast({
-          title: "오류",
-          description: "민원데이터 삭제에 실패했습니다.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "성공",
-          description: "민원데이터가 성공적으로 삭제되었습니다.",
-        });
-        fetchCivilComplaintsData();
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
+    if (error) {
+      console.error('Error deleting civil complaints data:', error);
+      toast({
+        title: "오류",
+        description: "민원데이터 삭제에 실패했습니다.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "성공",
+        description: "민원데이터가 성공적으로 삭제되었습니다.",
+      });
+      fetchCivilComplaintsData();
     }
   };
 
