@@ -22,9 +22,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
-    console.log('Chat request received:', { message, context });
+    console.log('질문 받음:', message);
 
-    // Generate embedding for user message
+    // 1. 사용자 질문을 벡터화
     const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: {
@@ -37,62 +37,97 @@ serve(async (req) => {
       }),
     });
 
-    let trainingContext = '';
+    if (!embeddingResponse.ok) {
+      throw new Error('벡터화 실패');
+    }
+
+    const embeddingData = await embeddingResponse.json();
+    const queryVector = embeddingData.data[0].embedding;
     
-    if (embeddingResponse.ok) {
-      const embeddingData = await embeddingResponse.json();
-      const queryVector = embeddingData.data[0].embedding;
-      
-    // Retrieve relevant training data from Supabase (both training materials and civil complaints)
-    const [trainingResult, civilComplaintsResult] = await Promise.all([
-      supabaseClient
-        .from('training_vectors')
-        .select('content, title')
-        .limit(3),
-      supabaseClient
-        .from('civil_complaints_vectors')
-        .select('content, title')
-        .limit(3)
-    ]);
+    console.log('질문 벡터화 완료');
 
-    const trainingData = [...(trainingResult.data || []), ...(civilComplaintsResult.data || [])];
+    // 2. 벡터 유사도 검색으로 가장 유사한 민원 데이터 찾기
+    const { data: similarComplaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
+      query_embedding: queryVector,
+      match_threshold: 0.78, // 유사도 임계값
+      match_count: 3
+    });
 
-    if (trainingData && trainingData.length > 0) {
-      // Simple similarity calculation (for demo - in production, use pgvector)
-      const relevantData = trainingData.filter(item => 
-        item.content.toLowerCase().includes(message.toLowerCase()) ||
-        message.toLowerCase().includes(item.title.toLowerCase())
-      );
-      
-      if (relevantData.length > 0) {
-        trainingContext = '\n\n관련 학습자료:\n' + relevantData.map(item => 
-          `[${item.title}]: ${item.content.substring(0, 300)}...`
-        ).join('\n\n');
-      }
+    // 3. 교육자료에서도 검색
+    const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
+      query_embedding: queryVector,
+      match_threshold: 0.78,
+      match_count: 2
+    });
+
+    console.log('벡터 검색 결과:', { 
+      complaints: similarComplaints?.length || 0, 
+      training: similarTraining?.length || 0 
+    });
+
+    // 4. 유사한 민원이 없으면 안내 메시지
+    if ((!similarComplaints || similarComplaints.length === 0) && 
+        (!similarTraining || similarTraining.length === 0)) {
+      return new Response(JSON.stringify({ 
+        reply: "죄송합니다. 유사한 민원이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요." 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    if (trainingResult.error) {
-      console.error('Error fetching training data:', trainingResult.error);
-    }
-    if (civilComplaintsResult.error) {
-      console.error('Error fetching civil complaints data:', civilComplaintsResult.error);
-    }
+    // 5. 찾은 데이터를 바탕으로 컨텍스트 구성
+    let contextInfo = '';
+    
+    if (similarComplaints && similarComplaints.length > 0) {
+      contextInfo += '\n\n=== 유사한 민원 사례 ===\n';
+      similarComplaints.forEach((complaint, index) => {
+        const metadata = complaint.metadata || {};
+        contextInfo += `\n${index + 1}. 민원 정보:\n`;
+        contextInfo += `   - 내용: ${complaint.content.substring(0, 200)}...\n`;
+        if (metadata.department) {
+          contextInfo += `   - 관련 부서: ${metadata.department}\n`;
+        }
+        if (metadata.status) {
+          contextInfo += `   - 처리 상태: ${metadata.status}\n`;
+        }
+        contextInfo += `   - 유사도: ${(complaint.similarity * 100).toFixed(1)}%\n`;
+      });
     }
 
-    // If no relevant training data found, provide default response
-    if (!trainingContext) {
-      trainingContext = '\n\n죄송합니다. 해당 질문에 대한 학습된 자료를 찾을 수 없습니다. 관리자에게 문의하시거나 관련 부서에 직접 연락해주세요.';
+    if (similarTraining && similarTraining.length > 0) {
+      contextInfo += '\n\n=== 관련 교육자료 ===\n';
+      similarTraining.forEach((training, index) => {
+        contextInfo += `\n${index + 1}. ${training.title}\n`;
+        contextInfo += `   내용: ${training.content.substring(0, 150)}...\n`;
+      });
     }
 
-    const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 당직 근무자들의 질문에 친절하고 정확하게 답변해주세요.
+    // 6. 당직 정보 추가
+    if (context) {
+      contextInfo += `\n\n=== 현재 당직 정보 ===\n${context}`;
+    }
 
-현재 당직 정보: ${context || '없음'}${trainingContext}
+    // 7. AI에게 답변 요청
+    const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 
 
-답변 시 다음 사항을 고려해주세요:
-- 제공된 교육자료에 기반해서만 답변하세요
-- 교육자료에 없는 내용은 "모르겠습니다"라고 답변하세요
-- 긴급상황 시 관련 부서 연락처를 안내해주세요
-- 친근하고 공손한 어조로 답변해주세요`;
+사용자의 질문에 대해 다음과 같은 형식으로 답변해주세요:
+
+**처리 방법:**
+- 구체적인 처리 절차를 단계별로 설명
+
+**관련 부서:**
+- 해당 업무를 담당하는 부서 정보 (있는 경우)
+
+**유사 민원 사례:**
+- 비슷한 민원의 처리 결과나 참고사항
+
+답변 시 주의사항:
+- 제공된 정보에만 기반해서 답변하세요
+- 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
+- 친절하고 공손한 어조를 유지하세요
+- 긴급한 상황이면 당직실 연락을 안내하세요
+
+제공된 정보:${contextInfo}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -104,28 +139,31 @@ serve(async (req) => {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
+          { role: 'user', content: `질문: ${message}` }
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: 0.3,
+        max_tokens: 800,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenAI API 오류: ${response.status}`);
     }
 
     const data = await response.json();
     const reply = data.choices[0].message.content;
 
-    console.log('AI response generated successfully');
+    console.log('AI 답변 생성 완료');
 
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (error) {
-    console.error('Error in chat-bot function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('채팅봇 오류:', error);
+    return new Response(JSON.stringify({ 
+      error: '죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
