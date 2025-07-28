@@ -49,14 +49,14 @@ serve(async (req) => {
     // 2. 벡터 유사도 검색으로 가장 유사한 민원 데이터 찾기
     const { data: similarComplaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
       query_embedding: queryVector,
-      match_threshold: 0.8, // 유사도 임계값 상향 조정
+      match_threshold: 0.7, // 유사도 임계값을 0.7로 하향 조정
       match_count: 3
     });
 
     // 3. 교육자료에서도 검색
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.78,
+      match_threshold: 0.7, // 임계값을 0.7로 통일
       match_count: 2
     });
 
