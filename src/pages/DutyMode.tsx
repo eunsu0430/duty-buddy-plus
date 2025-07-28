@@ -33,7 +33,7 @@ const DutyMode = () => {
     {
       id: '1',
       type: 'system',
-      content: '안녕하세요! 당직근무 지원 시스템입니다. 민원 종류를 입력하시면 처리 방법과 등록 정보를 안내해드리겠습니다.',
+      content: '안녕하세요! 당직근무 지원 시스템입니다. 민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드리겠습니다.',
       timestamp: new Date()
     }
   ]);
@@ -47,6 +47,7 @@ const DutyMode = () => {
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
   const [isLoading, setIsLoading] = useState(false);
+  const [showComplaintForm, setShowComplaintForm] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -255,11 +256,13 @@ ${complaintForm.description}
   };
 
   return (
-    <div className="h-screen bg-background flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
-      <div className="border-b bg-card p-4">
+      <div className="border-b bg-card/80 backdrop-blur-sm shadow-sm p-4">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold">당직근무 지원 시스템 - 당직자 모드</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            🏢 당직근무 지원 시스템 - 당직자 모드
+          </h1>
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
@@ -318,15 +321,15 @@ ${complaintForm.description}
         </div>
 
         {/* Center - Chat Interface */}
-        <div className="col-span-6">
-          <Card className="h-full flex flex-col">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5" />
-                민원 상담 AI
+        <div className={showComplaintForm ? "col-span-6" : "col-span-9"}>
+          <Card className="h-full flex flex-col shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <MessageCircle className="w-6 h-6 text-primary" />
+                🤖 AI 민원 상담
               </CardTitle>
-              <CardDescription>
-                민원 종류를 입력하시면 처리 방법과 등록 정보를 안내해드립니다.
+              <CardDescription className="text-base">
+                민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col p-0">
@@ -353,20 +356,28 @@ ${complaintForm.description}
                   ))}
                 </div>
               </ScrollArea>
-              <div className="border-t p-4">
-                <div className="flex gap-2">
+              <div className="border-t bg-card p-4">
+                <div className="flex gap-3">
                   <Input
-                    placeholder="민원 종류나 상황을 입력하세요... (예: 층간소음, 쓰레기 문제, 시설 고장 등)"
+                    placeholder="🗣️ 민원 종류나 상황을 자세히 입력하세요... (예: 아파트 101동에서 밤 11시부터 계속 층간소음이 발생하고 있습니다)"
                     value={currentMessage}
                     onChange={(e) => setCurrentMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
                     disabled={isLoading}
+                    className="text-base h-12"
                   />
-                  <Button onClick={handleSendMessage} disabled={isLoading}>
+                  <Button 
+                    onClick={handleSendMessage} 
+                    disabled={isLoading}
+                    className="h-12 px-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
+                  >
                     {isLoading ? (
-                      <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                      <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
                     ) : (
-                      <Send className="w-4 h-4" />
+                      <>
+                        <Send className="w-5 h-5 mr-1" />
+                        전송
+                      </>
                     )}
                   </Button>
                 </div>
@@ -375,62 +386,89 @@ ${complaintForm.description}
           </Card>
         </div>
 
-        {/* Right Sidebar - Complaint Form */}
-        <div className="col-span-3">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                민원 등록 서식
-              </CardTitle>
-              <CardDescription>
-                간단한 정보 입력으로 정리된 민원 문구를 생성합니다.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="complaint-type">민원 유형</Label>
-                <Input
-                  id="complaint-type"
-                  placeholder="예: 소음 민원"
-                  value={complaintForm.type}
-                  onChange={(e) => setComplaintForm(prev => ({ ...prev, type: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="complaint-location">발생 장소</Label>
-                <Input
-                  id="complaint-location"
-                  placeholder="예: 101동 502호"
-                  value={complaintForm.location}
-                  onChange={(e) => setComplaintForm(prev => ({ ...prev, location: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="complaint-reporter">신고자 (선택)</Label>
-                <Input
-                  id="complaint-reporter"
-                  placeholder="홍길동"
-                  value={complaintForm.reporter}
-                  onChange={(e) => setComplaintForm(prev => ({ ...prev, reporter: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="complaint-description">상세 내용</Label>
-                <Textarea
-                  id="complaint-description"
-                  placeholder="민원 내용을 자세히 입력해주세요..."
-                  rows={4}
-                  value={complaintForm.description}
-                  onChange={(e) => setComplaintForm(prev => ({ ...prev, description: e.target.value }))}
-                />
-              </div>
-              <Button onClick={generateComplaintText} className="w-full">
-                민원 등록 문구 생성
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Right Sidebar - Complaint Form Toggle */}
+        {showComplaintForm && (
+          <div className="col-span-3">
+            <Card className="h-full">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    민원 등록 서식
+                  </CardTitle>
+                  <CardDescription>
+                    간단한 정보 입력으로 정리된 민원 문구를 생성합니다.
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowComplaintForm(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  ✕
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="complaint-type">민원 유형</Label>
+                  <Input
+                    id="complaint-type"
+                    placeholder="예: 소음 민원"
+                    value={complaintForm.type}
+                    onChange={(e) => setComplaintForm(prev => ({ ...prev, type: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="complaint-location">발생 장소</Label>
+                  <Input
+                    id="complaint-location"
+                    placeholder="예: 101동 502호"
+                    value={complaintForm.location}
+                    onChange={(e) => setComplaintForm(prev => ({ ...prev, location: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="complaint-reporter">신고자 (선택)</Label>
+                  <Input
+                    id="complaint-reporter"
+                    placeholder="홍길동"
+                    value={complaintForm.reporter}
+                    onChange={(e) => setComplaintForm(prev => ({ ...prev, reporter: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="complaint-description">상세 내용</Label>
+                  <Textarea
+                    id="complaint-description"
+                    placeholder="민원 내용을 자세히 입력해주세요..."
+                    rows={4}
+                    value={complaintForm.description}
+                    onChange={(e) => setComplaintForm(prev => ({ ...prev, description: e.target.value }))}
+                  />
+                </div>
+                <Button 
+                  onClick={generateComplaintText} 
+                  className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  📋 민원 등록 문구 생성
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Floating Complaint Form Button */}
+        {!showComplaintForm && (
+          <div className="fixed bottom-6 right-6">
+            <Button
+              onClick={() => setShowComplaintForm(true)}
+              className="h-14 px-6 text-lg font-semibold bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent shadow-xl hover:shadow-2xl transition-all duration-300 rounded-full"
+            >
+              📝 민원 등록 서식
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Detail Dialog */}
