@@ -43,25 +43,40 @@ serve(async (req) => {
       const embeddingData = await embeddingResponse.json();
       const queryVector = embeddingData.data[0].embedding;
       
-      // Search for similar vectors in training data
-      const { data: trainingData } = await supabaseClient
+    // Retrieve relevant training data from Supabase (both training materials and civil complaints)
+    const [trainingResult, civilComplaintsResult] = await Promise.all([
+      supabaseClient
         .from('training_vectors')
         .select('content, title')
-        .limit(5);
+        .limit(3),
+      supabaseClient
+        .from('civil_complaints_vectors')
+        .select('content, title')
+        .limit(3)
+    ]);
 
-      if (trainingData && trainingData.length > 0) {
-        // Simple similarity calculation (for demo - in production, use pgvector)
-        const relevantData = trainingData.filter(item => 
-          item.content.toLowerCase().includes(message.toLowerCase()) ||
-          message.toLowerCase().includes(item.title.toLowerCase())
-        );
-        
-        if (relevantData.length > 0) {
-          trainingContext = '\n\n관련 교육자료:\n' + relevantData.map(item => 
-            `[${item.title}]: ${item.content.substring(0, 300)}...`
-          ).join('\n\n');
-        }
+    const trainingData = [...(trainingResult.data || []), ...(civilComplaintsResult.data || [])];
+
+    if (trainingData && trainingData.length > 0) {
+      // Simple similarity calculation (for demo - in production, use pgvector)
+      const relevantData = trainingData.filter(item => 
+        item.content.toLowerCase().includes(message.toLowerCase()) ||
+        message.toLowerCase().includes(item.title.toLowerCase())
+      );
+      
+      if (relevantData.length > 0) {
+        trainingContext = '\n\n관련 학습자료:\n' + relevantData.map(item => 
+          `[${item.title}]: ${item.content.substring(0, 300)}...`
+        ).join('\n\n');
       }
+    }
+
+    if (trainingResult.error) {
+      console.error('Error fetching training data:', trainingResult.error);
+    }
+    if (civilComplaintsResult.error) {
+      console.error('Error fetching civil complaints data:', civilComplaintsResult.error);
+    }
     }
 
     // If no relevant training data found, provide default response

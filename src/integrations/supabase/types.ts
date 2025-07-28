@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      civil_complaints_vectors: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          title: string
+          updated_at: string
+          vector: number[]
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          title: string
+          updated_at?: string
+          vector: number[]
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          title?: string
+          updated_at?: string
+          vector?: number[]
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           created_at: string
