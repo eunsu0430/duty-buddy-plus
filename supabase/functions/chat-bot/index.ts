@@ -76,35 +76,37 @@ serve(async (req) => {
     }
 
     // 5. 찾은 데이터를 바탕으로 컨텍스트 구성
-    let contextInfo = '';
+    let trainingContext = '';
+    let complaintCases = '';
     
+    // 교육자료에서 처리방법 정보 추출
+    if (similarTraining && similarTraining.length > 0) {
+      trainingContext = '\n\n=== 교육자료 기반 처리방법 ===\n';
+      similarTraining.forEach((training, index) => {
+        trainingContext += `${index + 1}. ${training.title}\n`;
+        trainingContext += `내용: ${training.content.substring(0, 200)}...\n\n`;
+      });
+    }
+    
+    // 유사 민원 사례 정보
     if (similarComplaints && similarComplaints.length > 0) {
-      contextInfo += '\n\n=== 유사한 민원 사례 ===\n';
+      complaintCases = '\n\n=== 유사민원사례 ===\n';
       similarComplaints.forEach((complaint, index) => {
         const metadata = complaint.metadata || {};
-        contextInfo += `\n${index + 1}. 민원 정보:\n`;
-        contextInfo += `   - 내용: ${complaint.content.substring(0, 200)}...\n`;
-        if (metadata.department) {
-          contextInfo += `   - 관련 부서: ${metadata.department}\n`;
-        }
-        if (metadata.status) {
-          contextInfo += `   - 처리 상태: ${metadata.status}\n`;
-        }
-        contextInfo += `   - 유사도: ${(complaint.similarity * 100).toFixed(1)}%\n`;
+        complaintCases += `${index + 1}. 유사민원사례\n`;
+        complaintCases += `민원번호: ${metadata.serialNumber || '정보없음'}\n`;
+        complaintCases += `내용: ${complaint.content.substring(0, 150)}...\n`;
+        complaintCases += `처리부서: ${metadata.department || '정보없음'}\n`;
+        complaintCases += `처리상태: ${metadata.status || '정보없음'}\n`;
+        complaintCases += `날짜: ${metadata.date || '정보없음'}\n`;
+        complaintCases += `유사도: ${(complaint.similarity * 100).toFixed(1)}%\n\n`;
       });
     }
 
-    if (similarTraining && similarTraining.length > 0) {
-      contextInfo += '\n\n=== 관련 교육자료 ===\n';
-      similarTraining.forEach((training, index) => {
-        contextInfo += `\n${index + 1}. ${training.title}\n`;
-        contextInfo += `   내용: ${training.content.substring(0, 150)}...\n`;
-      });
-    }
-
-    // 6. 당직 정보 추가
-    if (context) {
-      contextInfo += `\n\n=== 현재 당직 정보 ===\n${context}`;
+    // 6. 당직 정보 추가 (전화번호 제외)
+    let dutyInfo = '';
+    if (context && !context.includes('전화') && !context.includes('연락처')) {
+      dutyInfo = `\n\n=== 현재 당직 정보 ===\n${context}`;
     }
 
     // 7. AI에게 답변 요청
@@ -113,21 +115,23 @@ serve(async (req) => {
 사용자의 질문에 대해 다음과 같은 형식으로 답변해주세요:
 
 **처리 방법:**
-- 구체적인 처리 절차를 단계별로 설명
+- 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
 
-**관련 부서:**
-- 해당 업무를 담당하는 부서 정보 (있는 경우)
-
-**유사 민원 사례:**
-- 비슷한 민원의 처리 결과나 참고사항
+**유사민원사례:**
+- 민원번호: [민원번호]
+- 내용: [민원 내용 요약]  
+- 처리부서: [담당 부서]
+- 처리상태: [처리 상태]
+- 날짜: [처리 날짜]
 
 답변 시 주의사항:
-- 제공된 정보에만 기반해서 답변하세요
+- 전화번호나 연락처는 절대 언급하지 마세요
+- 교육자료에 기반해서만 처리방법을 설명하세요
+- 민원사례는 제공된 형식을 정확히 따라주세요
 - 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
-- 긴급한 상황이면 당직실 연락을 안내하세요
 
-제공된 정보:${contextInfo}`;
+제공된 정보:${trainingContext}${complaintCases}${dutyInfo}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
