@@ -14,7 +14,158 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_users: {
+        Row: {
+          created_at: string
+          id: string
+          password_hash: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          password_hash: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          password_hash?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      civil_complaints_data: {
+        Row: {
+          complaint_type: string
+          created_at: string
+          id: string
+          month_uploaded: number
+          processing_method: string
+          registration_info: string | null
+          updated_at: string
+          year_uploaded: number
+        }
+        Insert: {
+          complaint_type: string
+          created_at?: string
+          id?: string
+          month_uploaded: number
+          processing_method: string
+          registration_info?: string | null
+          updated_at?: string
+          year_uploaded: number
+        }
+        Update: {
+          complaint_type?: string
+          created_at?: string
+          id?: string
+          month_uploaded?: number
+          processing_method?: string
+          registration_info?: string | null
+          updated_at?: string
+          year_uploaded?: number
+        }
+        Relationships: []
+      }
+      departments: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      duty_schedule: {
+        Row: {
+          created_at: string
+          department_id: string | null
+          department_name: string
+          duty_date: string
+          duty_facility: string
+          id: string
+          notes: string | null
+          phone_number: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id?: string | null
+          department_name: string
+          duty_date: string
+          duty_facility: string
+          id?: string
+          notes?: string | null
+          phone_number: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string | null
+          department_name?: string
+          duty_date?: string
+          duty_facility?: string
+          id?: string
+          notes?: string | null
+          phone_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "duty_schedule_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_materials: {
+        Row: {
+          content: string
+          created_at: string
+          file_url: string | null
+          id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
