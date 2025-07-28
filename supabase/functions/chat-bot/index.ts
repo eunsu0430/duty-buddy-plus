@@ -24,29 +24,60 @@ serve(async (req) => {
 
     console.log('Chat request received:', { message, context });
 
-    // Search for relevant training materials
-    const { data: trainingData, error: searchError } = await supabaseClient
-      .from('training_materials')
-      .select('content, title')
-      .ilike('content', `%${message}%`)
-      .limit(3);
+    // Generate embedding for user message
+    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-ada-002',
+        input: message
+      }),
+    });
 
     let trainingContext = '';
-    if (trainingData && trainingData.length > 0) {
-      trainingContext = `\n\n관련 교육자료:\n${trainingData.map(item => 
-        `- ${item.title}: ${item.content.substring(0, 200)}...`
-      ).join('\n')}`;
+    
+    if (embeddingResponse.ok) {
+      const embeddingData = await embeddingResponse.json();
+      const queryVector = embeddingData.data[0].embedding;
+      
+      // Search for similar vectors in training data
+      const { data: trainingData } = await supabaseClient
+        .from('training_vectors')
+        .select('content, title')
+        .limit(5);
+
+      if (trainingData && trainingData.length > 0) {
+        // Simple similarity calculation (for demo - in production, use pgvector)
+        const relevantData = trainingData.filter(item => 
+          item.content.toLowerCase().includes(message.toLowerCase()) ||
+          message.toLowerCase().includes(item.title.toLowerCase())
+        );
+        
+        if (relevantData.length > 0) {
+          trainingContext = '\n\n관련 교육자료:\n' + relevantData.map(item => 
+            `[${item.title}]: ${item.content.substring(0, 300)}...`
+          ).join('\n\n');
+        }
+      }
     }
 
-    const systemPrompt = `당신은 당직근무 지원 시스템의 AI 상담원입니다. 
-민원 처리 방법을 안내하고, 필요한 경우 담당 부서나 연락처를 알려주세요.
-간결하고 정확한 답변을 제공하며, 민원 등록에 필요한 정보를 정리해주세요.
+    // If no relevant training data found, provide default response
+    if (!trainingContext) {
+      trainingContext = '\n\n죄송합니다. 해당 질문에 대한 학습된 자료를 찾을 수 없습니다. 관리자에게 문의하시거나 관련 부서에 직접 연락해주세요.';
+    }
 
-현재 당직 부서 정보: ${context || '없음'}
-${trainingContext}
+    const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 당직 근무자들의 질문에 친절하고 정확하게 답변해주세요.
 
-교육자료에 관련 정보가 있으면 그것을 바탕으로 답변하고, 없으면 일반적인 처리방법을 안내하세요.
-만약 질문이 업무와 관련이 없거나 답변할 수 없는 내용이면 "죄송하지만 해당 내용에 대해서는 안내드릴 수 없습니다. 업무 관련 민원이나 당직 업무에 대해 질문해주세요."라고 답변하세요.`;
+현재 당직 정보: ${context || '없음'}${trainingContext}
+
+답변 시 다음 사항을 고려해주세요:
+- 제공된 교육자료에 기반해서만 답변하세요
+- 교육자료에 없는 내용은 "모르겠습니다"라고 답변하세요
+- 긴급상황 시 관련 부서 연락처를 안내해주세요
+- 친근하고 공손한 어조로 답변해주세요`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

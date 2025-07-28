@@ -17,13 +17,14 @@ const AdminMode = () => {
   const [dutyForm, setDutyForm] = useState({
     departmentName: "",
     dutyFacility: "",
-    dutyDate: "",
+    dutyDay: "",
     phoneNumber: "",
     notes: ""
   });
   const [departments, setDepartments] = useState<any[]>([]);
   const [editingDept, setEditingDept] = useState<any>(null);
   const [newDept, setNewDept] = useState({ name: "", description: "" });
+  const [trainingMaterials, setTrainingMaterials] = useState<any[]>([]);
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -67,7 +68,7 @@ const AdminMode = () => {
     const dutyData = {
       department_name: dutyForm.departmentName,
       duty_facility: dutyForm.dutyFacility,
-      duty_date: dutyForm.dutyDate,
+      duty_day: dutyForm.dutyDay,
       phone_number: dutyForm.phoneNumber,
       notes: dutyForm.notes
     };
@@ -90,7 +91,7 @@ const AdminMode = () => {
       setDutyForm({
         departmentName: "",
         dutyFacility: "",
-        dutyDate: "",
+        dutyDay: "",
         phoneNumber: "",
         notes: ""
       });
@@ -145,6 +146,9 @@ const AdminMode = () => {
         title: "교육자료 업데이트 완료",
         description: "교육자료가 성공적으로 벡터화되어 저장되었습니다."
       });
+      
+      // Refresh training materials list
+      fetchTrainingMaterials();
     } catch (error) {
       console.error('Training upload error:', error);
       toast({
@@ -234,12 +238,44 @@ const AdminMode = () => {
     }
   };
 
+  const fetchTrainingMaterials = async () => {
+    const { data, error } = await supabase
+      .from('training_vectors')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (!error) {
+      setTrainingMaterials(data || []);
+    }
+  };
+
+  const handleDeleteTrainingMaterial = async (id: string) => {
+    const { error } = await supabase
+      .from('training_vectors')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      toast({
+        title: "삭제 실패",
+        description: "교육자료 삭제 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "삭제 완료",
+        description: "교육자료가 성공적으로 삭제되었습니다."
+      });
+      fetchTrainingMaterials();
+    }
+  };
+
   const handleSystemReset = async () => {
     try {
       // Delete all data from all tables
       await supabase.from('duty_schedule').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('civil_complaints_data').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('training_materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('training_vectors').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
       toast({
@@ -278,6 +314,7 @@ const AdminMode = () => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchDepartments();
+      fetchTrainingMaterials();
     }
   }, [isAuthenticated]);
 
@@ -420,11 +457,43 @@ const AdminMode = () => {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     <p>• 지원 형식: PDF, DOC, DOCX, TXT</p>
-                    <p>• 기존 학습 내용을 제거하고 새로운 자료로 재학습됩니다</p>
+                    <p>• 파일 업로드 시 자동으로 벡터화되어 저장됩니다</p>
                   </div>
-                  <Button variant="destructive">
-                    기존 학습 데이터 초기화 및 재학습
-                  </Button>
+                  
+                  {/* Training Materials List */}
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-4">업로드된 교육자료</h4>
+                    {trainingMaterials.length === 0 ? (
+                      <p className="text-muted-foreground">등록된 교육자료가 없습니다.</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>제목</TableHead>
+                            <TableHead>업로드 일시</TableHead>
+                            <TableHead>관리</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {trainingMaterials.map((material) => (
+                            <TableRow key={material.id}>
+                              <TableCell>{material.title}</TableCell>
+                              <TableCell>{new Date(material.created_at).toLocaleString()}</TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteTrainingMaterial(material.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -588,14 +657,23 @@ const AdminMode = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="dutyDate">근무일</Label>
-                        <Input
-                          id="dutyDate"
-                          type="date"
-                          value={dutyForm.dutyDate}
-                          onChange={(e) => setDutyForm(prev => ({ ...prev, dutyDate: e.target.value }))}
+                        <Label htmlFor="dutyDay">근무요일</Label>
+                        <select
+                          id="dutyDay"
+                          className="w-full p-2 border rounded-md"
+                          value={dutyForm.dutyDay}
+                          onChange={(e) => setDutyForm(prev => ({ ...prev, dutyDay: e.target.value }))}
                           required
-                        />
+                        >
+                          <option value="">요일 선택</option>
+                          <option value="월요일">월요일</option>
+                          <option value="화요일">화요일</option>
+                          <option value="수요일">수요일</option>
+                          <option value="목요일">목요일</option>
+                          <option value="금요일">금요일</option>
+                          <option value="토요일">토요일</option>
+                          <option value="일요일">일요일</option>
+                        </select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phoneNumber">전화번호</Label>

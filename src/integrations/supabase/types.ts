@@ -100,10 +100,9 @@ export type Database = {
           created_at: string
           department_id: string | null
           department_name: string
-          duty_date: string
+          duty_day: string | null
           duty_facility: string
           id: string
-          notes: string | null
           phone_number: string
           updated_at: string
         }
@@ -111,10 +110,9 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           department_name: string
-          duty_date: string
+          duty_day?: string | null
           duty_facility: string
           id?: string
-          notes?: string | null
           phone_number: string
           updated_at?: string
         }
@@ -122,10 +120,9 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           department_name?: string
-          duty_date?: string
+          duty_day?: string | null
           duty_facility?: string
           id?: string
-          notes?: string | null
           phone_number?: string
           updated_at?: string
         }
@@ -163,6 +160,36 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      training_vectors: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          title: string
+          updated_at: string
+          vector: number[]
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          title: string
+          updated_at?: string
+          vector: number[]
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          title?: string
+          updated_at?: string
+          vector?: number[]
         }
         Relationships: []
       }

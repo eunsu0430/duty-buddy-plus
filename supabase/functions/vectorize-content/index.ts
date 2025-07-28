@@ -20,15 +20,42 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
-    console.log('Processing content for training materials');
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+    }
 
-    // Store the content with basic text processing for search
+    console.log('Processing content for vectorization:', metadata?.title);
+
+    // Generate embeddings using OpenAI
+    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-ada-002',
+        input: content
+      }),
+    });
+
+    if (!embeddingResponse.ok) {
+      throw new Error(`OpenAI API 오류: ${embeddingResponse.statusText}`);
+    }
+
+    const embeddingData = await embeddingResponse.json();
+    const vector = embeddingData.data[0].embedding;
+
+    // Store the content with vector embeddings
     const { data, error } = await supabaseClient
-      .from('training_materials')
+      .from('training_vectors')
       .insert([{
         title: metadata?.title || 'Training Material',
         content: content,
-        file_url: metadata?.file_url || null
+        vector: vector,
+        metadata: metadata || {}
       }]);
 
     if (error) {
@@ -36,11 +63,11 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log('Training material stored successfully');
+    console.log('Training material vectorized and stored successfully');
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '학습 자료가 성공적으로 저장되었습니다.' 
+      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.' 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

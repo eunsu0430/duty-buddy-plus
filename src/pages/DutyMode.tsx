@@ -14,9 +14,9 @@ interface DutySchedule {
   id: string;
   department_name: string;
   duty_facility: string;
-  duty_date: string;
+  duty_day: string;
   phone_number: string;
-  notes: string;
+  notes?: string;
 }
 
 interface Message {
@@ -84,7 +84,7 @@ const DutyMode = () => {
     const { data, error } = await supabase
       .from('duty_schedule')
       .select('*')
-      .order('duty_date', { ascending: true });
+      .order('duty_day', { ascending: true });
 
     if (error) {
       toast({
@@ -324,7 +324,7 @@ ${complaintForm.description}
                       <div className="font-medium">{duty.department_name}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(duty.duty_date).toLocaleDateString('ko-KR')}
+                        {duty.duty_day}
                       </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
                         <Phone className="w-3 h-3" />
@@ -501,9 +501,9 @@ ${complaintForm.description}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>근무일</Label>
+                  <Label>근무요일</Label>
                   <div className="font-medium">
-                    {new Date(selectedDuty.duty_date).toLocaleDateString('ko-KR')}
+                    {selectedDuty.duty_day}
                   </div>
                 </div>
                 <div>
