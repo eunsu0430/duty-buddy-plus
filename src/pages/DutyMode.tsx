@@ -72,10 +72,19 @@ const DutyMode = () => {
     
     if (!dutyDay) return false;
     
-    // 당직일이 현재 요일을 포함하는지 확인
-    return dutyDay.includes(currentDayName) || 
-           dutyDay.includes('공휴일') || 
-           dutyDay.includes('매일');
+    // 매일 근무하는 경우
+    if (dutyDay.includes('매일')) return true;
+    
+    // 현재 요일이 당직일에 포함되는지 확인
+    const isCurrentDayIncluded = dutyDay.includes(currentDayName);
+    
+    // 공휴일 근무 부서인 경우, 실제 공휴일일 때만 활성화
+    // 여기서는 단순하게 토/일요일을 주말로 간주
+    // 실제 공휴일 API를 사용하려면 별도 구현 필요
+    const isHoliday = currentDay === 0 || currentDay === 6; // 일요일 또는 토요일
+    const hasHolidayDuty = dutyDay.includes('공휴일');
+    
+    return isCurrentDayIncluded || (hasHolidayDuty && isHoliday);
   };
 
   useEffect(() => {
