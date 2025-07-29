@@ -33,6 +33,11 @@ const AdminMode = () => {
   const [dutySchedules, setDutySchedules] = useState<any[]>([]);
   const [editingDuty, setEditingDuty] = useState<any>(null);
   
+  // State for IP access management
+  const [allowedIPs, setAllowedIPs] = useState<{ ip: string; description: string }[]>([]);
+  const [newIPForm, setNewIPForm] = useState({ ip: '', description: '' });
+  const [editingIP, setEditingIP] = useState<{ index: number; ip: string; description: string } | null>(null);
+  
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -529,12 +534,95 @@ const AdminMode = () => {
     }
   };
 
+  // IP 접근 관리 함수들
+  const loadAllowedIPs = () => {
+    const savedIPs = localStorage.getItem('allowedIPs');
+    if (savedIPs) {
+      try {
+        const parsed = JSON.parse(savedIPs);
+        setAllowedIPs(parsed);
+      } catch (error) {
+        console.error('IP 목록 로드 실패:', error);
+      }
+    } else {
+      // 기본 허용 IP 설정
+      const defaultIPs = [
+        { ip: '108.15.0.0/16', description: '내부 네트워크' },
+        { ip: '192.168.2.8', description: '지정 IP' },
+        { ip: '127.0.0.1', description: '로컬호스트 (개발용)' }
+      ];
+      setAllowedIPs(defaultIPs);
+      localStorage.setItem('allowedIPs', JSON.stringify(defaultIPs));
+    }
+  };
+
+  const saveAllowedIPs = (ips: any[]) => {
+    localStorage.setItem('allowedIPs', JSON.stringify(ips));
+    setAllowedIPs(ips);
+  };
+
+  const handleAddIP = () => {
+    if (!newIPForm.ip.trim()) {
+      toast({
+        title: "오류",
+        description: "IP 주소를 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const newIP = {
+      ip: newIPForm.ip.trim(),
+      description: newIPForm.description.trim() || '설명 없음'
+    };
+
+    const updatedIPs = [...allowedIPs, newIP];
+    saveAllowedIPs(updatedIPs);
+    setNewIPForm({ ip: '', description: '' });
+
+    toast({
+      title: "추가 완료",
+      description: "새로운 IP가 허용 목록에 추가되었습니다."
+    });
+  };
+
+  const handleUpdateIP = () => {
+    if (!editingIP || !editingIP.ip.trim()) {
+      return;
+    }
+
+    const updatedIPs = [...allowedIPs];
+    updatedIPs[editingIP.index] = {
+      ip: editingIP.ip.trim(),
+      description: editingIP.description.trim() || '설명 없음'
+    };
+
+    saveAllowedIPs(updatedIPs);
+    setEditingIP(null);
+
+    toast({
+      title: "수정 완료",
+      description: "IP 정보가 수정되었습니다."
+    });
+  };
+
+  const handleDeleteIP = (index: number) => {
+    const updatedIPs = allowedIPs.filter((_, i) => i !== index);
+    saveAllowedIPs(updatedIPs);
+
+    toast({
+      title: "삭제 완료",
+      description: "IP가 허용 목록에서 제거되었습니다."
+    });
+  };
+
   // Effect to fetch data when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       fetchTrainingMaterials();
       fetchCivilComplaintsData();
       fetchDutySchedules();
+      loadAllowedIPs(); // IP 목록 로드 추가
     }
   }, [isAuthenticated]);
 
@@ -615,11 +703,12 @@ const AdminMode = () => {
 
         <div className="space-y-6">
           <Tabs defaultValue="data-upload" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="data-upload">민원데이터 관리</TabsTrigger>
               <TabsTrigger value="training">교육자료 관리</TabsTrigger>
               <TabsTrigger value="duty">당직명령부 관리</TabsTrigger>
               <TabsTrigger value="api-keys">API 키 관리</TabsTrigger>
+              <TabsTrigger value="ip-access">IP 접근 관리</TabsTrigger>
               <TabsTrigger value="system">시스템 설정</TabsTrigger>
             </TabsList>
 
@@ -1211,6 +1300,153 @@ const AdminMode = () => {
                     </div>
 
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="ip-access" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>IP 접근 관리</CardTitle>
+                  <CardDescription>
+                    시스템에 접근할 수 있는 IP 주소를 관리합니다. 허용된 IP가 아닌 경우 접근이 차단됩니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  
+                  {/* 새 IP 추가 */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium mb-4">새 IP 추가</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="newIP">IP 주소</Label>
+                        <Input
+                          id="newIP"
+                          placeholder="예: 192.168.1.100 또는 192.168.1.0/24"
+                          value={newIPForm.ip}
+                          onChange={(e) => setNewIPForm(prev => ({ ...prev, ip: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ipDescription">설명</Label>
+                        <Input
+                          id="ipDescription"
+                          placeholder="IP 주소에 대한 설명"
+                          value={newIPForm.description}
+                          onChange={(e) => setNewIPForm(prev => ({ ...prev, description: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <Button onClick={handleAddIP} className="mt-4">
+                      <Plus className="w-4 h-4 mr-2" />
+                      IP 추가
+                    </Button>
+                  </div>
+
+                  {/* 허용된 IP 목록 */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium mb-4">허용된 IP 목록</h4>
+                    {allowedIPs.length === 0 ? (
+                      <p className="text-muted-foreground">등록된 IP가 없습니다.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {allowedIPs.map((ipEntry, index) => (
+                          <div key={index} className="border rounded-lg p-3">
+                            {editingIP?.index === index ? (
+                              <div className="space-y-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="space-y-2">
+                                    <Label>IP 주소</Label>
+                                    <Input
+                                      value={editingIP.ip}
+                                      onChange={(e) => setEditingIP({ ...editingIP, ip: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>설명</Label>
+                                    <Input
+                                      value={editingIP.description}
+                                      onChange={(e) => setEditingIP({ ...editingIP, description: e.target.value })}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" onClick={handleUpdateIP}>
+                                    저장
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => setEditingIP(null)}>
+                                    취소
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="font-mono text-sm font-medium">{ipEntry.ip}</div>
+                                  <div className="text-sm text-muted-foreground">{ipEntry.description}</div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEditingIP({ index, ip: ipEntry.ip, description: ipEntry.description })}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                    수정
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="flex items-center gap-1"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        삭제
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>IP 삭제</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          "{ipEntry.ip}" IP를 허용 목록에서 삭제하시겠습니까?
+                                          이 작업은 되돌릴 수 없습니다.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>취소</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteIP(index)}
+                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        >
+                                          삭제
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 안내 정보 */}
+                  <div className="bg-muted rounded-lg p-4">
+                    <h5 className="font-medium mb-2">💡 IP 주소 형식 안내</h5>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <p><strong>단일 IP:</strong> 192.168.1.100</p>
+                      <p><strong>IP 범위 (CIDR):</strong> 192.168.1.0/24</p>
+                      <p><strong>와일드카드:</strong> 108.15.* (108.15.으로 시작하는 모든 IP)</p>
+                    </div>
+                    <div className="mt-3 text-xs text-orange-600">
+                      ⚠️ 주의: IP 설정 변경 후 페이지를 새로고침하면 변경사항이 적용됩니다.
+                    </div>
+                  </div>
+
                 </CardContent>
               </Card>
             </TabsContent>
