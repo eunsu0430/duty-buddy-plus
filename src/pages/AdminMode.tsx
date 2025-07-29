@@ -1628,6 +1628,28 @@ const AdminMode = () => {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="system" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>시스템 설정</CardTitle>
+                  <CardDescription>시스템 관리 및 유지보수 기능입니다.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Button onClick={handleSystemReset} variant="destructive" disabled={isLoading}>
+                      시스템 초기화
+                    </Button>
+                    <Button onClick={handleDatabaseBackup} variant="outline" disabled={isLoading}>
+                      데이터베이스 백업
+                    </Button>
+                    <Button onClick={handleSystemLogs} variant="outline">
+                      시스템 로그 확인
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
