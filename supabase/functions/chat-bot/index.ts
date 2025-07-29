@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, context } = await req.json();
+    const { message, context, getSimilarOnly } = await req.json();
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -49,8 +49,8 @@ serve(async (req) => {
     // 2. 벡터 유사도 검색으로 가장 유사한 민원 데이터 찾기
     const { data: similarComplaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
       query_embedding: queryVector,
-      match_threshold: 0.78, // 유사도 임계값을 0.78로 조정
-      match_count: 3
+      match_threshold: getSimilarOnly ? 0.7 : 0.78, // getSimilarOnly일 때는 더 넓은 범위로 검색
+      match_count: getSimilarOnly ? 6 : 3  // getSimilarOnly일 때는 6개까지
     });
 
     // 3. 교육자료에서도 검색
@@ -64,6 +64,15 @@ serve(async (req) => {
       complaints: similarComplaints?.length || 0, 
       training: similarTraining?.length || 0 
     });
+
+    // getSimilarOnly가 true이면 유사민원만 반환
+    if (getSimilarOnly) {
+      return new Response(JSON.stringify({ 
+        similarComplaints: similarComplaints || []
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 4. 유사한 민원이 없으면 안내 메시지
     if ((!similarComplaints || similarComplaints.length === 0) && 

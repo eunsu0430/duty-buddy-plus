@@ -38,6 +38,20 @@ interface Message {
   }>;
 }
 
+interface ComplaintType {
+  type: string;
+  count: number;
+  recentComplaint: string;
+}
+
+interface SimilarComplaint {
+  id: string;
+  content: string;
+  title: string;
+  similarity: number;
+  metadata: any;
+}
+
 const DutyMode = () => {
   const [dutySchedules, setDutySchedules] = useState<DutySchedule[]>([]);
   const [selectedDuty, setSelectedDuty] = useState<DutySchedule | null>(null);
@@ -61,6 +75,10 @@ const DutyMode = () => {
   const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
+  const [topComplaintTypes, setTopComplaintTypes] = useState<ComplaintType[]>([]);
+  const [selectedComplaintType, setSelectedComplaintType] = useState<string | null>(null);
+  const [similarComplaints, setSimilarComplaints] = useState<SimilarComplaint[]>([]);
+  const [showSimilarDialog, setShowSimilarDialog] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -121,6 +139,7 @@ const DutyMode = () => {
     fetchDutySchedules();
     fetchWeather();
     fetchHolidays(); // 공휴일 데이터 가져오기 추가
+    fetchTopComplaintTypes(); // 인기 민원 유형 가져오기 추가
     
     // Update time every minute
     const timer = setInterval(() => {
@@ -135,6 +154,121 @@ const DutyMode = () => {
       clearInterval(weatherTimer);
     };
   }, []);
+
+  // 최근 한달간 민원 데이터에서 상위 5개 유형 가져오기
+  const fetchTopComplaintTypes = async () => {
+    try {
+      // 최근 30일간의 민원 데이터 가져오기
+      const { data: complaints, error } = await supabase
+        .from('civil_complaints_vectors')
+        .select('title, content, metadata')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .limit(1000);
+
+      if (error) {
+        console.error('민원 데이터 조회 실패:', error);
+        return;
+      }
+
+      if (!complaints || complaints.length === 0) {
+        console.log('최근 민원 데이터가 없습니다.');
+        return;
+      }
+
+      // 민원 유형별로 그룹핑 (키워드 기반)
+      const typeGroups: { [key: string]: { count: number; recentComplaint: string } } = {};
+      const typeKeywords = {
+        '소음': ['소음', '시끄', '층간', '음향', '비트', '드럼', '스피커', '음악'],
+        '환경/쓰레기': ['쓰레기', '폐기물', '환경', '청소', '냄새', '악취', '오염'],
+        '시설/수리': ['수리', '고장', '시설', '보수', '파손', '정비', '설비', '전기', '배관'],
+        '교통': ['주차', '교통', '신호등', '도로', '버스', '택시', '차량', '보행'],
+        '복지': ['복지', '지원', '혜택', '수당', '급여', '연금', '의료', '건강']
+      };
+
+      complaints.forEach(complaint => {
+        const content = (complaint.title + ' ' + complaint.content).toLowerCase();
+        let matchedType = '기타';
+
+        // 키워드 매칭으로 유형 분류
+        for (const [type, keywords] of Object.entries(typeKeywords)) {
+          if (keywords.some(keyword => content.includes(keyword))) {
+            matchedType = type;
+            break;
+          }
+        }
+
+        if (!typeGroups[matchedType]) {
+          typeGroups[matchedType] = { count: 0, recentComplaint: '' };
+        }
+        typeGroups[matchedType].count++;
+        if (!typeGroups[matchedType].recentComplaint) {
+          typeGroups[matchedType].recentComplaint = complaint.title || complaint.content.substring(0, 50);
+        }
+      });
+
+      // 빈도 순으로 정렬하여 상위 5개 선택
+      const sortedTypes = Object.entries(typeGroups)
+        .map(([type, info]) => ({
+          type,
+          count: info.count,
+          recentComplaint: info.recentComplaint
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      setTopComplaintTypes(sortedTypes);
+    } catch (error) {
+      console.error('인기 민원 유형 조회 중 오류:', error);
+    }
+  };
+
+  // 특정 유형의 유사 민원들 가져오기
+  const fetchSimilarComplaintsByType = async (complaintType: string) => {
+    try {
+      setIsLoading(true);
+      
+      // 해당 유형의 키워드를 포함하는 민원들을 벡터 검색으로 찾기
+      const { data, error } = await supabase.functions.invoke('chat-bot', {
+        body: { 
+          message: complaintType + ' 관련 민원',
+          getSimilarOnly: true
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.similarComplaints && data.similarComplaints.length > 0) {
+        const similar = data.similarComplaints
+          .slice(0, 6)
+          .map((complaint: any) => ({
+            id: complaint.id,
+            content: complaint.content,
+            title: complaint.title,
+            similarity: complaint.similarity,
+            metadata: complaint.metadata
+          }));
+        
+        setSimilarComplaints(similar);
+        setSelectedComplaintType(complaintType);
+        setShowSimilarDialog(true);
+      } else {
+        toast({
+          title: "검색 결과 없음",
+          description: `${complaintType} 관련 유사 민원을 찾을 수 없습니다.`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('유사 민원 검색 오류:', error);
+      toast({
+        title: "검색 오류",
+        description: "유사 민원 검색 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchWeather = async () => {
     try {
@@ -438,6 +572,36 @@ ${complaintForm.description}
                 민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
               </CardDescription>
             </CardHeader>
+            
+            {/* Top 5 민원 유형 버튼들 */}
+            {topComplaintTypes.length > 0 && (
+              <div className="border-b bg-muted/30 p-4">
+                <div className="text-sm font-medium text-muted-foreground mb-3">
+                  📊 최근 한달간 빈발 민원 유형 (더블클릭하면 유사민원 확인)
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {topComplaintTypes.map((complaint, index) => (
+                    <Button
+                      key={complaint.type}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2 text-xs h-8 hover:bg-primary/10 border-primary/20"
+                      onDoubleClick={() => fetchSimilarComplaintsByType(complaint.type)}
+                      disabled={isLoading}
+                    >
+                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs font-bold">
+                        {index + 1}
+                      </span>
+                      {complaint.type}
+                      <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-xs">
+                        {complaint.count}건
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <CardContent className="flex-1 flex flex-col p-0 min-h-0">
               <ScrollArea className="flex-1 p-4">
                 <div className="space-y-4">
@@ -610,6 +774,76 @@ ${complaintForm.description}
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Similar Complaints Dialog */}
+      <Dialog open={showSimilarDialog} onOpenChange={setShowSimilarDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              📊 {selectedComplaintType} 관련 유사민원
+            </DialogTitle>
+            <DialogDescription>
+              최근 데이터에서 찾은 유사한 민원들입니다. (총 {similarComplaints.length}건)
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] mt-4">
+            <div className="space-y-4">
+              {similarComplaints.map((complaint, index) => (
+                <div
+                  key={complaint.id}
+                  className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-primary text-primary-foreground px-2 py-1 rounded text-sm font-bold">
+                        #{index + 1}
+                      </span>
+                      <span className="font-semibold text-sm text-primary">
+                        유사도: {(complaint.similarity * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {complaint.metadata?.date || '날짜정보없음'}
+                    </div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="font-medium text-foreground mb-1">
+                      {complaint.title || '제목 없음'}
+                    </div>
+                    <div className="text-sm text-muted-foreground bg-background p-3 rounded border">
+                      {complaint.content.length > 200 
+                        ? complaint.content.substring(0, 200) + '...'
+                        : complaint.content}
+                    </div>
+                  </div>
+                  
+                  {complaint.metadata && (
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <span className="font-medium">처리부서:</span>
+                        <span className="ml-1">{complaint.metadata.department || '정보없음'}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">처리상태:</span>
+                        <span className="ml-1">{complaint.metadata.status || '정보없음'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSimilarDialog(false)}
+            >
+              닫기
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
