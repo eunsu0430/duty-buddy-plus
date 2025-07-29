@@ -1087,6 +1087,26 @@ const AdminMode = () => {
                         </div>
                         <div className="flex gap-2">
                           <Button 
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              // OpenAI API Key 설정 폼 표시
+                              const form = document.createElement('div');
+                              form.innerHTML = `
+                                <lov-actions>
+                                  <lov-secret-form name="OPENAI_API_KEY"></lov-secret-form>
+                                </lov-actions>
+                              `;
+                              // 실제로는 React 컴포넌트에서 처리해야 하므로, 대신 toast로 안내
+                              toast({
+                                title: "API 키 설정",
+                                description: "OpenAI API 키를 설정하려면 채팅창에서 'OpenAI API 키 설정해줘'라고 요청해주세요.",
+                              });
+                            }}
+                          >
+                            API 키 설정
+                          </Button>
+                          <Button 
                             variant="outline"
                             onClick={() => window.open('https://platform.openai.com/api-keys', '_blank')}
                             size="sm"
@@ -1111,6 +1131,18 @@ const AdminMode = () => {
                         </div>
                         <div className="flex gap-2">
                           <Button 
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              toast({
+                                title: "API 키 설정",
+                                description: "날씨 API 키를 설정하려면 채팅창에서 'WEATHER_API_KEY 설정해줘'라고 요청해주세요.",
+                              });
+                            }}
+                          >
+                            API 키 설정
+                          </Button>
+                          <Button 
                             variant="outline"
                             onClick={() => window.open('https://openweathermap.org/api', '_blank')}
                             size="sm"
@@ -1134,6 +1166,18 @@ const AdminMode = () => {
                           </p>
                         </div>
                         <div className="flex gap-2">
+                          <Button 
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              toast({
+                                title: "API 키 설정",
+                                description: "공휴일 API 키를 설정하려면 채팅창에서 'HOLIDAY_API_KEY 설정해줘'라고 요청해주세요.",
+                              });
+                            }}
+                          >
+                            API 키 설정
+                          </Button>
                           <Button 
                             variant="outline"
                             onClick={() => window.open('https://www.data.go.kr/dataset/15012690/openapi.do', '_blank')}
