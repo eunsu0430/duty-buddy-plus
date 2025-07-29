@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2, Edit, Plus } from "lucide-react";
 import { PersonalInfoMasker } from "@/lib/personalInfoMasker";
+import { ApiKeyManager } from "@/components/ApiKeyManager";
 import * as XLSX from 'xlsx';
 
 const AdminMode = () => {
@@ -38,6 +39,14 @@ const AdminMode = () => {
   const [allowedIPs, setAllowedIPs] = useState<{ id?: string; ip_address: string; description: string; is_active: boolean }[]>([]);
   const [newIPForm, setNewIPForm] = useState({ ip: '', description: '' });
   const [editingIP, setEditingIP] = useState<{ id: string; ip: string; description: string } | null>(null);
+  
+  // State for API key management
+  const [apiKeys, setApiKeys] = useState({
+    openai: '',
+    weather: '',
+    holiday: ''
+  });
+  const [showApiKeyForm, setShowApiKeyForm] = useState<string | null>(null);
   
   
   const { toast } = useToast();
@@ -771,6 +780,42 @@ const AdminMode = () => {
   };
 
   // Effect to fetch data when authenticated
+  // API key management functions
+  const handleApiKeyUpdate = async (keyType: string, apiKey: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Create edge function to update Supabase secret
+      const { error } = await supabase.functions.invoke('update-api-key', {
+        body: {
+          keyType: keyType.toUpperCase() + '_API_KEY',
+          apiKey: apiKey
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "성공",
+        description: `${keyType.toUpperCase()} API 키가 성공적으로 업데이트되었습니다.`,
+      });
+      
+      setApiKeys(prev => ({ ...prev, [keyType]: apiKey }));
+      setShowApiKeyForm(null);
+    } catch (error) {
+      console.error('API 키 업데이트 오류:', error);
+      toast({
+        title: "오류",
+        description: "API 키 업데이트에 실패했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchTrainingMaterials();
@@ -1361,23 +1406,18 @@ const AdminMode = () => {
                           <Button 
                             variant="default"
                             size="sm"
-                            onClick={() => {
-                              // OpenAI API Key 설정 폼 표시
-                              const form = document.createElement('div');
-                              form.innerHTML = `
-                                <lov-actions>
-                                  <lov-secret-form name="OPENAI_API_KEY"></lov-secret-form>
-                                </lov-actions>
-                              `;
-                              // 실제로는 React 컴포넌트에서 처리해야 하므로, 대신 toast로 안내
-                              toast({
-                                title: "API 키 설정",
-                                description: "OpenAI API 키를 설정하려면 채팅창에서 'OpenAI API 키 설정해줘'라고 요청해주세요.",
-                              });
-                            }}
+                            onClick={() => setShowApiKeyForm('openai')}
                           >
                             API 키 설정
                           </Button>
+                          <Button 
+                            variant="outline"
+                            onClick={() => window.open('https://platform.openai.com/api-keys', '_blank')}
+                            size="sm"
+                          >
+                            키 발급받기
+                          </Button>
+                        </div>
                           <Button 
                             variant="outline"
                             onClick={() => window.open('https://platform.openai.com/api-keys', '_blank')}
@@ -1405,12 +1445,7 @@ const AdminMode = () => {
                           <Button 
                             variant="default"
                             size="sm"
-                            onClick={() => {
-                              toast({
-                                title: "API 키 설정",
-                                description: "날씨 API 키를 설정하려면 채팅창에서 'WEATHER_API_KEY 설정해줘'라고 요청해주세요.",
-                              });
-                            }}
+                            onClick={() => setShowApiKeyForm('weather')}
                           >
                             API 키 설정
                           </Button>
@@ -1441,12 +1476,7 @@ const AdminMode = () => {
                           <Button 
                             variant="default"
                             size="sm"
-                            onClick={() => {
-                              toast({
-                                title: "API 키 설정",
-                                description: "공휴일 API 키를 설정하려면 채팅창에서 'HOLIDAY_API_KEY 설정해줘'라고 요청해주세요.",
-                              });
-                            }}
+                            onClick={() => setShowApiKeyForm('holiday')}
                           >
                             API 키 설정
                           </Button>
@@ -1481,6 +1511,51 @@ const AdminMode = () => {
                         </Button>
                       </div>
                     </div>
+
+                    {/* API Key Input Form */}
+                    {showApiKeyForm && (
+                      <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-medium">
+                            {showApiKeyForm.toUpperCase()} API 키 설정
+                          </h4>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowApiKeyForm(null)}
+                          >
+                            취소
+                          </Button>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="api-key-input">API 키</Label>
+                            <Input
+                              id="api-key-input"
+                              type="password"
+                              placeholder={`${showApiKeyForm.toUpperCase()} API 키를 입력하세요`}
+                              value={apiKeys[showApiKeyForm as keyof typeof apiKeys]}
+                              onChange={(e) => setApiKeys(prev => ({ 
+                                ...prev, 
+                                [showApiKeyForm!]: e.target.value 
+                              }))}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleApiKeyUpdate(showApiKeyForm!, apiKeys[showApiKeyForm as keyof typeof apiKeys])}
+                              disabled={isLoading || !apiKeys[showApiKeyForm as keyof typeof apiKeys]}
+                              className="flex-1"
+                            >
+                              {isLoading ? '설정 중...' : 'API 키 저장'}
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            ⚠️ 주의: 이 기능은 데모용입니다. 실제 production 환경에서는 Supabase Dashboard의 Secrets 설정을 사용해주세요.
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                   </div>
                 </CardContent>
