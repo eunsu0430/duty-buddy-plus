@@ -558,7 +558,7 @@ ${complaintForm.description}
                 </div>
                 <Button 
                   onClick={generateComplaintText} 
-                  className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent shadow-lg hover:shadow-xl transition-all duration-300"
+                  className="w-full h-12 text-lg font-semibold bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
                 >
                   📋 민원 등록 문구 생성
                 </Button>
