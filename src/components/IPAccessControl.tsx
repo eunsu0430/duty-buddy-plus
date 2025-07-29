@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 
 interface IPAccessControlProps {
   children: React.ReactNode;
@@ -38,7 +39,7 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
       setUserIP(ip);
       
       // 허용된 IP 범위 체크
-      const isAllowed = checkAllowedIP(ip);
+      const isAllowed = await checkAllowedIP(ip);
       setIsAccessAllowed(isAllowed);
       
     } catch (error) {
@@ -48,68 +49,69 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
     }
   };
 
-  const checkAllowedIP = (ip: string): boolean => {
-    // localStorage에서 허용된 IP 목록 가져오기
-    const savedIPs = localStorage.getItem('allowedIPs');
-    let allowedIPs = [];
+  const checkAllowedIP = async (ip: string): Promise<boolean> => {
+    try {
+      // 데이터베이스에서 활성화된 허용 IP 목록 가져오기
+      const { data: allowedIPs, error } = await supabase
+        .from('allowed_ips')
+        .select('ip_address')
+        .eq('is_active', true);
 
-    if (savedIPs) {
-      try {
-        allowedIPs = JSON.parse(savedIPs);
-      } catch (error) {
-        console.error('IP 목록 파싱 실패:', error);
+      if (error) {
+        console.error('IP 목록 조회 실패:', error);
+        return false;
       }
-    }
 
-    // 기본 허용 IP (localStorage에 없을 경우)
-    if (allowedIPs.length === 0) {
-      allowedIPs = [
-        { ip: '210.95.187.140', description: '허용된 IP' }
-      ];
-    }
+      if (!allowedIPs || allowedIPs.length === 0) {
+        return false;
+      }
 
-    // 각 허용된 IP 패턴과 비교
-    return allowedIPs.some((entry: any) => {
-      const allowedIP = entry.ip || entry;
-      
-      // CIDR 표기법 처리 (예: 192.168.1.0/24)
-      if (allowedIP.includes('/')) {
-        const [network, prefixLength] = allowedIP.split('/');
-        const prefix = parseInt(prefixLength);
-        const networkParts = network.split('.').map(Number);
-        const ipParts = ip.split('.').map(Number);
+      // 각 허용된 IP 패턴과 비교
+      return allowedIPs.some((entry: any) => {
+        const allowedIP = entry.ip_address;
         
-        if (networkParts.length !== 4 || ipParts.length !== 4) return false;
-        
-        const bitsToCheck = Math.floor(prefix / 8);
-        const remainingBits = prefix % 8;
-        
-        // 전체 바이트 비교
-        for (let i = 0; i < bitsToCheck; i++) {
-          if (networkParts[i] !== ipParts[i]) return false;
-        }
-        
-        // 부분 바이트 비교
-        if (remainingBits > 0 && bitsToCheck < 4) {
-          const mask = 255 << (8 - remainingBits);
-          if ((networkParts[bitsToCheck] & mask) !== (ipParts[bitsToCheck] & mask)) {
-            return false;
+        // CIDR 표기법 처리 (예: 192.168.1.0/24)
+        if (allowedIP.includes('/')) {
+          const [network, prefixLength] = allowedIP.split('/');
+          const prefix = parseInt(prefixLength);
+          const networkParts = network.split('.').map(Number);
+          const ipParts = ip.split('.').map(Number);
+          
+          if (networkParts.length !== 4 || ipParts.length !== 4) return false;
+          
+          const bitsToCheck = Math.floor(prefix / 8);
+          const remainingBits = prefix % 8;
+          
+          // 전체 바이트 비교
+          for (let i = 0; i < bitsToCheck; i++) {
+            if (networkParts[i] !== ipParts[i]) return false;
           }
+          
+          // 부분 바이트 비교
+          if (remainingBits > 0 && bitsToCheck < 4) {
+            const mask = 255 << (8 - remainingBits);
+            if ((networkParts[bitsToCheck] & mask) !== (ipParts[bitsToCheck] & mask)) {
+              return false;
+            }
+          }
+          
+          return true;
         }
         
-        return true;
-      }
-      
-      // 와일드카드 처리 (예: 108.15.*)
-      if (allowedIP.includes('*')) {
-        const pattern = allowedIP.replace(/\*/g, '.*');
-        const regex = new RegExp(`^${pattern}$`);
-        return regex.test(ip);
-      }
-      
-      // 정확한 IP 매치
-      return allowedIP === ip;
-    });
+        // 와일드카드 처리 (예: 108.15.*)
+        if (allowedIP.includes('*')) {
+          const pattern = allowedIP.replace(/\*/g, '.*');
+          const regex = new RegExp(`^${pattern}$`);
+          return regex.test(ip);
+        }
+        
+        // 정확한 IP 매치
+        return allowedIP === ip;
+      });
+    } catch (error) {
+      console.error('IP 확인 중 오류:', error);
+      return false;
+    }
   };
 
   // 로딩 중
