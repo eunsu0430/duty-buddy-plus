@@ -40,14 +40,6 @@ const AdminMode = () => {
   const [newIPForm, setNewIPForm] = useState({ ip: '', description: '' });
   const [editingIP, setEditingIP] = useState<{ id: string; ip: string; description: string } | null>(null);
   
-  // State for API key management
-  const [apiKeys, setApiKeys] = useState({
-    openai: '',
-    weather: '',
-    holiday: ''
-  });
-  const [showApiKeyForm, setShowApiKeyForm] = useState<string | null>(null);
-  
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -780,42 +772,6 @@ const AdminMode = () => {
   };
 
   // Effect to fetch data when authenticated
-  // API key management functions
-  const handleApiKeyUpdate = async (keyType: string, apiKey: string) => {
-    try {
-      setIsLoading(true);
-      
-      // Create edge function to update Supabase secret
-      const { error } = await supabase.functions.invoke('update-api-key', {
-        body: {
-          keyType: keyType.toUpperCase() + '_API_KEY',
-          apiKey: apiKey
-        }
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "성공",
-        description: `${keyType.toUpperCase()} API 키가 성공적으로 업데이트되었습니다.`,
-      });
-      
-      setApiKeys(prev => ({ ...prev, [keyType]: apiKey }));
-      setShowApiKeyForm(null);
-    } catch (error) {
-      console.error('API 키 업데이트 오류:', error);
-      toast({
-        title: "오류",
-        description: "API 키 업데이트에 실패했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (isAuthenticated) {
       fetchTrainingMaterials();
@@ -1557,7 +1513,6 @@ const AdminMode = () => {
                       </div>
                     )}
 
-                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
