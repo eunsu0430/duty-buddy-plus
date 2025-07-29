@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2, Edit, Plus } from "lucide-react";
+import { PersonalInfoMasker } from "@/lib/personalInfoMasker";
 import * as XLSX from 'xlsx';
 
 const AdminMode = () => {
@@ -273,8 +274,17 @@ const AdminMode = () => {
         completionDate: headers.findIndex(h => h?.includes('처리완료') || h?.includes('완료'))
       };
 
+      // 개인정보 마스킹 처리기 초기화
+      const personalInfoMasker = new PersonalInfoMasker({
+        maskNames: true,
+        maskPhoneNumbers: true, 
+        maskAddresses: true,
+        logDetectedInfo: true
+      });
+
       // Process each row and create content for vectorization
       let processedCount = 0;
+      let personalInfoMaskedCount = 0;
       const currentFilename = file.name;
       
       // First, store the file information in civil_complaints_data
@@ -318,16 +328,41 @@ const AdminMode = () => {
           completionDate: columnMap.completionDate >= 0 ? row[columnMap.completionDate] : ''
         };
 
-        // Create structured content for vectorization
+        // 개인정보 마스킹 처리
+        const { maskedText: maskedComplaintContent, detectedInfo: complaintDetected } = 
+          personalInfoMasker.maskPersonalInfo(data.complaintContent || '');
+        const { maskedText: maskedActionContent, detectedInfo: actionDetected } = 
+          personalInfoMasker.maskPersonalInfo(data.actionContent || '');
+
+        // 마스킹된 데이터로 업데이트
+        const maskedData = {
+          ...data,
+          complaintContent: maskedComplaintContent,
+          actionContent: maskedActionContent
+        };
+
+        // 개인정보 탐지 로그
+        const totalDetected = {
+          names: [...complaintDetected.names, ...actionDetected.names],
+          phoneNumbers: [...complaintDetected.phoneNumbers, ...actionDetected.phoneNumbers],
+          addresses: [...complaintDetected.addresses, ...actionDetected.addresses]
+        };
+
+        if (personalInfoMasker.hasDetectedInfo(totalDetected)) {
+          console.log(`🔒 민원 ${maskedData.serialNumber}: ${personalInfoMasker.getDetectionStats(totalDetected)}`);
+          personalInfoMaskedCount++;
+        }
+
+        // Create structured content for vectorization with masked data
         const content = `
-민원번호: ${data.serialNumber}
-접수일자: ${data.date}
-민원내용: ${data.complaintContent}
-조치내용: ${data.actionContent}
-처리부서: ${data.department}
-단순문의여부: ${data.isSimpleInquiry}
-처리상태: ${data.status}
-처리완료날짜: ${data.completionDate}
+민원번호: ${maskedData.serialNumber}
+접수일자: ${maskedData.date}
+민원내용: ${maskedData.complaintContent}
+조치내용: ${maskedData.actionContent}
+처리부서: ${maskedData.department}
+단순문의여부: ${maskedData.isSimpleInquiry}
+처리상태: ${maskedData.status}
+처리완료날짜: ${maskedData.completionDate}
         `.trim();
 
         // Send to vectorization function
@@ -354,9 +389,13 @@ const AdminMode = () => {
       }
 
       if (processedCount > 0) {
+        const successMessage = personalInfoMaskedCount > 0 
+          ? `${processedCount}건의 민원데이터가 성공적으로 업로드되고 벡터화되었습니다.\n🔒 ${personalInfoMaskedCount}건에서 개인정보를 자동 마스킹 처리했습니다.`
+          : `${processedCount}건의 민원데이터가 성공적으로 업로드되고 벡터화되었습니다.`;
+          
         toast({
           title: "성공",
-          description: `${processedCount}건의 민원데이터가 성공적으로 업로드되고 벡터화되었습니다.`,
+          description: successMessage,
         });
         fetchCivilComplaintsData();
       } else {
@@ -720,6 +759,8 @@ const AdminMode = () => {
                   <CardDescription>
                     Excel 파일(.xls, .xlsx)을 업로드하여 민원데이터를 벡터화하고 등록합니다.
                     일련번호, 일자, 민원내용, 조치내용, 처리부서, 단순문의여부, 처리상태, 처리완료날짜 컬럼이 포함되어야 합니다.
+                    <br />
+                    <span className="text-green-600 font-medium">🔒 개인정보 자동 보호: 이름, 전화번호, 주소는 자동으로 마스킹 처리됩니다.</span>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
