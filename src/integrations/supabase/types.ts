@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_logs: {
+        Row: {
+          access_granted: boolean
+          access_time: string
+          created_at: string
+          id: string
+          ip_address: string
+          user_agent: string | null
+        }
+        Insert: {
+          access_granted?: boolean
+          access_time?: string
+          created_at?: string
+          id?: string
+          ip_address: string
+          user_agent?: string | null
+        }
+        Update: {
+          access_granted?: boolean
+          access_time?: string
+          created_at?: string
+          id?: string
+          ip_address?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       admin_users: {
         Row: {
           created_at: string
@@ -35,6 +62,33 @@ export type Database = {
           password_hash?: string
           updated_at?: string
           username?: string
+        }
+        Relationships: []
+      }
+      allowed_ips: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          ip_address: string
+          is_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_address: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_address?: string
+          is_active?: boolean
+          updated_at?: string
         }
         Relationships: []
       }

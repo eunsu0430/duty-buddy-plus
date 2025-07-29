@@ -43,10 +43,32 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
       const isAllowed = await checkAllowedIP(ip);
       setIsAccessAllowed(isAllowed);
       
+      // 접속 로그 저장
+      await logAccessAttempt(ip, isAllowed);
+      
     } catch (error) {
       console.error('IP 확인 실패:', error);
       // IP 확인 실패 시 기본적으로 차단
       setIsAccessAllowed(false);
+    }
+  };
+
+  const logAccessAttempt = async (ip: string, granted: boolean) => {
+    try {
+      const userAgent = navigator.userAgent;
+      const { error } = await supabase
+        .from('access_logs')
+        .insert({
+          ip_address: ip,
+          access_granted: granted,
+          user_agent: userAgent
+        });
+
+      if (error) {
+        console.error('접속 로그 저장 실패:', error);
+      }
+    } catch (error) {
+      console.error('접속 로그 저장 중 오류:', error);
     }
   };
 
