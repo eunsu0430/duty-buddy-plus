@@ -64,10 +64,7 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
     // 기본 허용 IP (localStorage에 없을 경우)
     if (allowedIPs.length === 0) {
       allowedIPs = [
-        { ip: '108.15.*', description: '내부 네트워크' },
-        { ip: '192.168.2.8', description: '지정 IP' },
-        { ip: '121.153.40.162', description: '외부 접근 허용 IP' },
-        { ip: '127.0.0.1', description: '로컬호스트 (개발용)' }
+        { ip: '210.95.187.140', description: '허용된 IP' }
       ];
     }
 
@@ -155,8 +152,7 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
                 <strong>허용된 IP 범위:</strong>
               </p>
               <ul className="text-sm text-red-700 mt-2 space-y-1">
-                <li>• 108.15.xxx.xxx (내부 네트워크)</li>
-                <li>• 192.168.2.8 (지정 IP)</li>
+                <li>• 210.95.187.140 (허용된 IP)</li>
               </ul>
             </div>
             <p className="text-sm text-muted-foreground text-center">
