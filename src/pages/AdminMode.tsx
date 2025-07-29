@@ -481,24 +481,72 @@ const AdminMode = () => {
 
   // Delete civil complaints data
   const handleDeleteCivilComplaintsData = async (dataId: string) => {
-    const { error } = await (supabase as any)
-      .from('civil_complaints_data')
-      .delete()
-      .eq('id', dataId);
+    try {
+      // 먼저 삭제할 파일의 정보를 가져옴
+      const { data: fileData, error: fetchError } = await (supabase as any)
+        .from('civil_complaints_data')
+        .select('filename')
+        .eq('id', dataId)
+        .single();
 
-    if (error) {
-      console.error('Error deleting civil complaints data:', error);
+      if (fetchError) {
+        console.error('Error fetching file data:', fetchError);
+        toast({
+          title: "오류",
+          description: "파일 정보를 가져오는데 실패했습니다.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const filename = fileData?.filename;
+
+      // 1. 관련된 벡터 데이터 삭제
+      if (filename) {
+        const { error: vectorError } = await supabase
+          .from('civil_complaints_vectors')
+          .delete()
+          .eq('metadata->>filename', filename);
+
+        if (vectorError) {
+          console.error('Error deleting vector data:', vectorError);
+          toast({
+            title: "경고",
+            description: "벡터 데이터 삭제 중 일부 오류가 발생했습니다.",
+            variant: "destructive",
+          });
+        }
+      }
+
+      // 2. 파일 정보 삭제
+      const { error: dataError } = await (supabase as any)
+        .from('civil_complaints_data')
+        .delete()
+        .eq('id', dataId);
+
+      if (dataError) {
+        console.error('Error deleting civil complaints data:', dataError);
+        toast({
+          title: "오류",
+          description: "민원데이터 삭제에 실패했습니다.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "성공",
+          description: filename 
+            ? "민원데이터 파일과 관련 벡터 데이터가 성공적으로 삭제되었습니다."
+            : "민원데이터가 성공적으로 삭제되었습니다.",
+        });
+        fetchCivilComplaintsData();
+      }
+    } catch (error) {
+      console.error('Unexpected error during deletion:', error);
       toast({
         title: "오류",
-        description: "민원데이터 삭제에 실패했습니다.",
+        description: "삭제 중 예상치 못한 오류가 발생했습니다.",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "성공",
-        description: "민원데이터가 성공적으로 삭제되었습니다.",
-      });
-      fetchCivilComplaintsData();
     }
   };
 
@@ -794,26 +842,53 @@ const AdminMode = () => {
                      {civilComplaintsData.length === 0 ? (
                        <p className="text-muted-foreground">업로드된 민원데이터가 없습니다.</p>
                      ) : (
-                       civilComplaintsData.map((data) => (
-                         <div key={data.id} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <h4 className="font-medium">{data.filename || `민원데이터_${data.id.slice(0,8)}`}</h4>
-                              <div className="text-sm text-muted-foreground space-y-1">
-                                <p>처리방법: {data.processing_method}</p>
-                                <p>민원유형: {data.complaint_type}</p>
-                                <p>업로드 날짜: {new Date(data.created_at).toLocaleDateString('ko-KR')}</p>
-                                {data.registration_info && <p>세부정보: {data.registration_info}</p>}
-                              </div>
-                            </div>
-                           <Button
-                             variant="destructive"
-                             size="sm"
-                             onClick={() => handleDeleteCivilComplaintsData(data.id)}
-                           >
-                             삭제
-                           </Button>
-                         </div>
-                       ))
+                        civilComplaintsData.map((data) => (
+                          <div key={data.id} className="flex items-center justify-between p-3 border rounded-lg">
+                             <div>
+                               <h4 className="font-medium">{data.filename || `민원데이터_${data.id.slice(0,8)}`}</h4>
+                               <div className="text-sm text-muted-foreground space-y-1">
+                                 <p>처리방법: {data.processing_method}</p>
+                                 <p>민원유형: {data.complaint_type}</p>
+                                 <p>업로드 날짜: {new Date(data.created_at).toLocaleDateString('ko-KR')}</p>
+                                 {data.registration_info && <p>세부정보: {data.registration_info}</p>}
+                                 <p className="text-orange-600 text-xs">🔗 관련 벡터 데이터 포함</p>
+                               </div>
+                             </div>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                >
+                                  삭제
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>민원데이터 삭제</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    "{data.filename || '민원데이터'}"를 삭제하시겠습니까?
+                                    <br /><br />
+                                    <span className="text-red-600 font-medium">
+                                      ⚠️ 이 작업은 파일 정보와 관련된 모든 벡터 데이터를 함께 삭제합니다.
+                                    </span>
+                                    <br />
+                                    이 작업은 되돌릴 수 없습니다.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>취소</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteCivilComplaintsData(data.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    삭제
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ))
                      )}
                    </div>
                  </CardContent>
