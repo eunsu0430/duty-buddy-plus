@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 
 interface IPAccessControlProps {
   children: React.ReactNode;
@@ -8,6 +9,7 @@ interface IPAccessControlProps {
 const IPAccessControl = ({ children }: IPAccessControlProps) => {
   const [isAccessAllowed, setIsAccessAllowed] = useState<boolean | null>(null);
   const [userIP, setUserIP] = useState<string>('');
+  const [allowedIPs, setAllowedIPs] = useState<string[]>([]);
 
   useEffect(() => {
     checkIPAccess();
@@ -38,7 +40,7 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
       setUserIP(ip);
       
       // 허용된 IP 범위 체크
-      const isAllowed = checkAllowedIP(ip);
+      const isAllowed = await checkAllowedIP(ip);
       setIsAccessAllowed(isAllowed);
       
     } catch (error) {
@@ -48,29 +50,31 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
     }
   };
 
-  const checkAllowedIP = (ip: string): boolean => {
-    // localStorage에서 허용된 IP 목록 가져오기
-    const savedIPs = localStorage.getItem('allowedIPs');
-    let allowedIPs = [];
+  const checkAllowedIP = async (ip: string): Promise<boolean> => {
+    try {
+      // Supabase에서 허용된 IP 목록 가져오기
+      const { data: allowedIPs, error } = await (supabase as any)
+        .from('allowed_ips')
+        .select('ip_address')
+        .eq('is_active', true);
 
-    if (savedIPs) {
-      try {
-        allowedIPs = JSON.parse(savedIPs);
-      } catch (error) {
-        console.error('IP 목록 파싱 실패:', error);
+      if (error) {
+        console.error('IP 목록 조회 실패:', error);
+        // 에러시 기본 허용 IP 사용
+        return ip === '210.95.187.140';
       }
-    }
 
-    // 기본 허용 IP (localStorage에 없을 경우)
-    if (allowedIPs.length === 0) {
-      allowedIPs = [
-        { ip: '210.95.187.140', description: '허용된 IP' }
-      ];
-    }
+      if (!allowedIPs || allowedIPs.length === 0) {
+        // 허용된 IP가 없을 경우 기본 IP 사용
+        return ip === '210.95.187.140';
+      }
 
-    // 각 허용된 IP 패턴과 비교
-    return allowedIPs.some((entry: any) => {
-      const allowedIP = entry.ip || entry;
+      // 상태 업데이트를 위해 허용된 IP 목록 저장
+      setAllowedIPs(allowedIPs.map(item => item.ip_address));
+
+      // 각 허용된 IP 패턴과 비교
+      return allowedIPs.some((entry: any) => {
+        const allowedIP = entry.ip_address;
       
       // CIDR 표기법 처리 (예: 192.168.1.0/24)
       if (allowedIP.includes('/')) {
@@ -107,9 +111,13 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
         return regex.test(ip);
       }
       
-      // 정확한 IP 매치
-      return allowedIP === ip;
-    });
+        // 정확한 IP 매치
+        return allowedIP === ip;
+      });
+    } catch (error) {
+      console.error('IP 확인 중 오류:', error);
+      return false;
+    }
   };
 
   // 로딩 중
@@ -152,7 +160,13 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
                 <strong>허용된 IP 범위:</strong>
               </p>
               <ul className="text-sm text-red-700 mt-2 space-y-1">
-                <li>• 210.95.187.140 (허용된 IP)</li>
+                {allowedIPs.length > 0 ? (
+                  allowedIPs.map((ip, index) => (
+                    <li key={index}>• {ip}</li>
+                  ))
+                ) : (
+                  <li>• 210.95.187.140 (기본 허용 IP)</li>
+                )}
               </ul>
             </div>
             <p className="text-sm text-muted-foreground text-center">
