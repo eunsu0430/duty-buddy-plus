@@ -615,10 +615,11 @@ const AdminMode = () => {
 
         <div className="space-y-6">
           <Tabs defaultValue="data-upload" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="data-upload">민원데이터 관리</TabsTrigger>
               <TabsTrigger value="training">교육자료 관리</TabsTrigger>
               <TabsTrigger value="duty">당직명령부 관리</TabsTrigger>
+              <TabsTrigger value="api-keys">API 키 관리</TabsTrigger>
               <TabsTrigger value="system">시스템 설정</TabsTrigger>
             </TabsList>
 
@@ -1059,6 +1060,112 @@ const AdminMode = () => {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="api-keys" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>API 키 관리</CardTitle>
+                  <CardDescription>
+                    시스템에서 사용하는 외부 API 키들을 관리합니다. 아래 버튼을 클릭하여 각 API 키를 설정하거나 변경할 수 있습니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-6">
+                    
+                    {/* OpenAI API Key */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium">OpenAI API Key</h4>
+                          <p className="text-sm text-muted-foreground">
+                            AI 챗봇 기능에 필요한 OpenAI API 키입니다.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            onClick={() => window.open('https://platform.openai.com/api-keys', '_blank')}
+                            size="sm"
+                          >
+                            키 발급받기
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-3">
+                        <strong>용도:</strong> 민원 상담 AI, 유사민원 검색, 교육자료 벡터화
+                      </div>
+                    </div>
+
+                    {/* Weather API Key */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium">Weather API Key</h4>
+                          <p className="text-sm text-muted-foreground">
+                            날씨 정보 표시에 필요한 날씨 API 키입니다.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            onClick={() => window.open('https://openweathermap.org/api', '_blank')}
+                            size="sm"
+                          >
+                            키 발급받기
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-3">
+                        <strong>용도:</strong> 당직자 모드 날씨 정보 표시
+                      </div>
+                    </div>
+
+                    {/* Holiday API Key */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium">공휴일 API Key</h4>
+                          <p className="text-sm text-muted-foreground">
+                            한국 공휴일 정보 조회에 필요한 공공데이터포털 API 키입니다.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            onClick={() => window.open('https://www.data.go.kr/dataset/15012690/openapi.do', '_blank')}
+                            size="sm"
+                          >
+                            키 발급받기
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-3">
+                        <strong>용도:</strong> 공휴일 당직 상태 표시, 당직 가능 여부 판단
+                      </div>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-muted rounded-lg">
+                      <h5 className="font-medium mb-2">📝 API 키 설정 방법</h5>
+                      <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                        <li>위의 "키 발급받기" 버튼을 클릭하여 각 서비스의 API 키를 발급받으세요.</li>
+                        <li>발급받은 API 키를 Supabase 프로젝트 설정의 Secrets에 등록하세요.</li>
+                        <li>설정 후 해당 기능들이 정상적으로 작동합니다.</li>
+                      </ol>
+                      <div className="mt-3 flex gap-2">
+                        <Button 
+                          variant="outline"
+                          onClick={() => window.open('https://supabase.com/dashboard/project/rlndmoxsnccurcfpxeai/settings/functions', '_blank')}
+                          size="sm"
+                        >
+                          Supabase Secrets 관리
+                        </Button>
+                      </div>
+                    </div>
+
                   </div>
                 </CardContent>
               </Card>
