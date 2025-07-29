@@ -41,6 +41,7 @@ interface Message {
 const DutyMode = () => {
   const [dutySchedules, setDutySchedules] = useState<DutySchedule[]>([]);
   const [selectedDuty, setSelectedDuty] = useState<DutySchedule | null>(null);
+  const [holidays, setHolidays] = useState<any[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([
     {
       id: '1',
@@ -63,6 +64,37 @@ const DutyMode = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // 공휴일 데이터 가져오기
+  const fetchHolidays = async () => {
+    try {
+      const today = new Date();
+      const { data, error } = await supabase.functions.invoke('holiday-api', {
+        body: {
+          year: today.getFullYear(),
+          month: today.getMonth() + 1
+        }
+      });
+
+      if (error) throw error;
+
+      if (data && data.holidays) {
+        setHolidays(data.holidays);
+      }
+    } catch (error) {
+      console.error('공휴일 정보를 가져오는데 실패했습니다:', error);
+    }
+  };
+
+  // 오늘이 공휴일인지 확인하는 함수
+  const isTodayHoliday = () => {
+    const today = new Date();
+    const todayStr = today.getFullYear().toString() + 
+                     (today.getMonth() + 1).toString().padStart(2, '0') + 
+                     today.getDate().toString().padStart(2, '0');
+    
+    return holidays.some(holiday => holiday.locdate === parseInt(todayStr));
+  };
+
   // 현재 요일과 당직일을 비교해서 통화가능한지 판단하는 함수
   const isDutyAvailable = (dutyDay: string) => {
     const today = new Date();
@@ -79,17 +111,16 @@ const DutyMode = () => {
     const isCurrentDayIncluded = dutyDay.includes(currentDayName);
     
     // 공휴일 근무 부서인 경우, 실제 공휴일일 때만 활성화
-    // 여기서는 단순하게 토/일요일을 주말로 간주
-    // 실제 공휴일 API를 사용하려면 별도 구현 필요
-    const isHoliday = currentDay === 0 || currentDay === 6; // 일요일 또는 토요일
     const hasHolidayDuty = dutyDay.includes('공휴일');
+    const isActualHoliday = isTodayHoliday(); // 실제 공휴일 API 사용
     
-    return isCurrentDayIncluded || (hasHolidayDuty && isHoliday);
+    return isCurrentDayIncluded || (hasHolidayDuty && isActualHoliday);
   };
 
   useEffect(() => {
     fetchDutySchedules();
     fetchWeather();
+    fetchHolidays(); // 공휴일 데이터 가져오기 추가
     
     // Update time every minute
     const timer = setInterval(() => {
