@@ -34,10 +34,10 @@ const AdminMode = () => {
   const [dutySchedules, setDutySchedules] = useState<any[]>([]);
   const [editingDuty, setEditingDuty] = useState<any>(null);
   
-  // State for IP access management (데이터베이스 기반)
-  const [allowedIPs, setAllowedIPs] = useState<any[]>([]);
+  // State for IP access management
+  const [allowedIPs, setAllowedIPs] = useState<{ ip: string; description: string }[]>([]);
   const [newIPForm, setNewIPForm] = useState({ ip: '', description: '' });
-  const [editingIP, setEditingIP] = useState<any>(null);
+  const [editingIP, setEditingIP] = useState<{ index: number; ip: string; description: string } | null>(null);
   
   
   const { toast } = useToast();
@@ -621,26 +621,35 @@ const AdminMode = () => {
     }
   };
 
-  // IP 접근 관리 함수들 (데이터베이스 기반)
-  const fetchAllowedIPs = async () => {
-    const { data, error } = await supabase
-      .from('allowed_ips')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching allowed IPs:', error);
-      toast({
-        title: "오류",
-        description: "허용 IP 목록을 불러오는데 실패했습니다.",
-        variant: "destructive",
-      });
+  // IP 접근 관리 함수들
+  const loadAllowedIPs = () => {
+    const savedIPs = localStorage.getItem('allowedIPs');
+    if (savedIPs) {
+      try {
+        const parsed = JSON.parse(savedIPs);
+        setAllowedIPs(parsed);
+      } catch (error) {
+        console.error('IP 목록 로드 실패:', error);
+      }
     } else {
-      setAllowedIPs(data || []);
+      // 기본 허용 IP 설정
+      const defaultIPs = [
+        { ip: '108.15.*', description: '내부 네트워크' },
+        { ip: '192.168.2.8', description: '지정 IP' },
+        { ip: '121.153.40.162', description: '외부 접근 허용 IP' },
+        { ip: '127.0.0.1', description: '로컬호스트 (개발용)' }
+      ];
+      setAllowedIPs(defaultIPs);
+      localStorage.setItem('allowedIPs', JSON.stringify(defaultIPs));
     }
   };
 
-  const handleAddIP = async () => {
+  const saveAllowedIPs = (ips: any[]) => {
+    localStorage.setItem('allowedIPs', JSON.stringify(ips));
+    setAllowedIPs(ips);
+  };
+
+  const handleAddIP = () => {
     if (!newIPForm.ip.trim()) {
       toast({
         title: "오류",
@@ -650,77 +659,49 @@ const AdminMode = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from('allowed_ips')
-      .insert({
-        ip_address: newIPForm.ip.trim(),
-        description: newIPForm.description.trim() || '설명 없음'
-      });
+    const newIP = {
+      ip: newIPForm.ip.trim(),
+      description: newIPForm.description.trim() || '설명 없음'
+    };
 
-    if (error) {
-      toast({
-        title: "오류",
-        description: "IP 추가에 실패했습니다.",
-        variant: "destructive"
-      });
-    } else {
-      setNewIPForm({ ip: '', description: '' });
-      toast({
-        title: "추가 완료",
-        description: "새로운 IP가 허용 목록에 추가되었습니다."
-      });
-      fetchAllowedIPs();
-    }
+    const updatedIPs = [...allowedIPs, newIP];
+    saveAllowedIPs(updatedIPs);
+    setNewIPForm({ ip: '', description: '' });
+
+    toast({
+      title: "추가 완료",
+      description: "새로운 IP가 허용 목록에 추가되었습니다."
+    });
   };
 
-  const handleUpdateIP = async () => {
-    if (!editingIP || !editingIP.ip_address?.trim()) {
+  const handleUpdateIP = () => {
+    if (!editingIP || !editingIP.ip.trim()) {
       return;
     }
 
-    const { error } = await supabase
-      .from('allowed_ips')
-      .update({
-        ip_address: editingIP.ip_address.trim(),
-        description: editingIP.description?.trim() || '설명 없음'
-      })
-      .eq('id', editingIP.id);
+    const updatedIPs = [...allowedIPs];
+    updatedIPs[editingIP.index] = {
+      ip: editingIP.ip.trim(),
+      description: editingIP.description.trim() || '설명 없음'
+    };
 
-    if (error) {
-      toast({
-        title: "오류",
-        description: "IP 수정에 실패했습니다.",
-        variant: "destructive"
-      });
-    } else {
-      setEditingIP(null);
-      toast({
-        title: "수정 완료",
-        description: "IP 정보가 수정되었습니다."
-      });
-      fetchAllowedIPs();
-    }
+    saveAllowedIPs(updatedIPs);
+    setEditingIP(null);
+
+    toast({
+      title: "수정 완료",
+      description: "IP 정보가 수정되었습니다."
+    });
   };
 
-  const handleDeleteIP = async (ipId: string) => {
-    const { error } = await supabase
-      .from('allowed_ips')
-      .delete()
-      .eq('id', ipId);
+  const handleDeleteIP = (index: number) => {
+    const updatedIPs = allowedIPs.filter((_, i) => i !== index);
+    saveAllowedIPs(updatedIPs);
 
-    if (error) {
-      toast({
-        title: "오류",
-        description: "IP 삭제에 실패했습니다.",
-        variant: "destructive"
-      });
-    } else {
-      toast({
-        title: "삭제 완료",
-        description: "IP가 허용 목록에서 제거되었습니다."
-      });
-      fetchAllowedIPs();
-    }
+    toast({
+      title: "삭제 완료",
+      description: "IP가 허용 목록에서 제거되었습니다."
+    });
   };
 
   // Effect to fetch data when authenticated
@@ -729,7 +710,7 @@ const AdminMode = () => {
       fetchTrainingMaterials();
       fetchCivilComplaintsData();
       fetchDutySchedules();
-      fetchAllowedIPs(); // IP 목록 로드 추가
+      loadAllowedIPs(); // IP 목록 로드 추가
     }
   }, [isAuthenticated]);
 
@@ -1485,17 +1466,17 @@ const AdminMode = () => {
                     {allowedIPs.length === 0 ? (
                       <p className="text-muted-foreground">등록된 IP가 없습니다.</p>
                     ) : (
-                       <div className="space-y-3">
-                        {allowedIPs.map((ipEntry) => (
-                          <div key={ipEntry.id} className="border rounded-lg p-3">
-                            {editingIP?.id === ipEntry.id ? (
+                      <div className="space-y-3">
+                        {allowedIPs.map((ipEntry, index) => (
+                          <div key={index} className="border rounded-lg p-3">
+                            {editingIP?.index === index ? (
                               <div className="space-y-3">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <div className="space-y-2">
                                     <Label>IP 주소</Label>
                                     <Input
-                                      value={editingIP.ip_address}
-                                      onChange={(e) => setEditingIP({ ...editingIP, ip_address: e.target.value })}
+                                      value={editingIP.ip}
+                                      onChange={(e) => setEditingIP({ ...editingIP, ip: e.target.value })}
                                     />
                                   </div>
                                   <div className="space-y-2">
@@ -1518,58 +1499,16 @@ const AdminMode = () => {
                             ) : (
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <div className="font-mono text-sm font-medium">{ipEntry.ip_address}</div>
+                                  <div className="font-mono text-sm font-medium">{ipEntry.ip}</div>
                                   <div className="text-sm text-muted-foreground">{ipEntry.description}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    상태: {ipEntry.is_active ? '활성' : '비활성'} | 
-                                    생성일: {new Date(ipEntry.created_at).toLocaleDateString()}
-                                  </div>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setEditingIP(ipEntry)}
+                                    onClick={() => setEditingIP({ index, ip: ipEntry.ip, description: ipEntry.description })}
                                     className="flex items-center gap-1"
                                   >
-                                    <Edit className="w-3 h-3" />
-                                    수정
-                                  </Button>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        className="flex items-center gap-1"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                        삭제
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>IP 삭제</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          "{ipEntry.ip_address}" IP를 허용 목록에서 삭제하시겠습니까?
-                                          이 작업은 되돌릴 수 없습니다.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>취소</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => handleDeleteIP(ipEntry.id)}
-                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        >
-                                          삭제
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
                                     <Edit className="w-3 h-3" />
                                     수정
                                   </Button>
@@ -1625,28 +1564,6 @@ const AdminMode = () => {
                     </div>
                   </div>
 
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="system" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>시스템 설정</CardTitle>
-                  <CardDescription>시스템 관리 및 유지보수 기능입니다.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Button onClick={handleSystemReset} variant="destructive" disabled={isLoading}>
-                      시스템 초기화
-                    </Button>
-                    <Button onClick={handleDatabaseBackup} variant="outline" disabled={isLoading}>
-                      데이터베이스 백업
-                    </Button>
-                    <Button onClick={handleSystemLogs} variant="outline">
-                      시스템 로그 확인
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
