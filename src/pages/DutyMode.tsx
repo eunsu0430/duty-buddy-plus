@@ -317,11 +317,6 @@ const DutyMode = () => {
 민원내용:
 ${complaintForm.description}
 
-처리요청사항:
-- 현장 확인 및 신속한 처리
-- 처리 결과 회신 요청
-- 재발 방지 대책 수립
-
 ※ 본 민원은 당직근무 지원 시스템을 통해 자동 생성되었습니다.`;
 
     navigator.clipboard.writeText(complaintText).then(() => {
