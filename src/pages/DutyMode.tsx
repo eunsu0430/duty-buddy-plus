@@ -544,12 +544,12 @@ ${complaintForm.description}
                   <div className="font-medium">{selectedDuty.phone_number}</div>
                 </div>
               </div>
-              {selectedDuty.remarks && (
-                <div>
-                  <Label>비고</Label>
-                  <div className="mt-1 p-2 bg-muted rounded">{selectedDuty.remarks}</div>
+              <div>
+                <Label>비고</Label>
+                <div className="mt-1 p-2 bg-muted rounded">
+                  {selectedDuty.remarks || '등록된 비고 사항이 없습니다.'}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>
