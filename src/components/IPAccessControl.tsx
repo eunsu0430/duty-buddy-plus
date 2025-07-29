@@ -66,6 +66,7 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
       allowedIPs = [
         { ip: '108.15.*', description: '내부 네트워크' },
         { ip: '192.168.2.8', description: '지정 IP' },
+        { ip: '121.153.40.162', description: '외부 접근 허용 IP' },
         { ip: '127.0.0.1', description: '로컬호스트 (개발용)' }
       ];
     }

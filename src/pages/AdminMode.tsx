@@ -547,8 +547,9 @@ const AdminMode = () => {
     } else {
       // 기본 허용 IP 설정
       const defaultIPs = [
-        { ip: '108.15.0.0/16', description: '내부 네트워크' },
+        { ip: '108.15.*', description: '내부 네트워크' },
         { ip: '192.168.2.8', description: '지정 IP' },
+        { ip: '121.153.40.162', description: '외부 접근 허용 IP' },
         { ip: '127.0.0.1', description: '로컬호스트 (개발용)' }
       ];
       setAllowedIPs(defaultIPs);

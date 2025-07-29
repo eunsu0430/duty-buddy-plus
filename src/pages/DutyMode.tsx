@@ -368,8 +368,8 @@ ${complaintForm.description}
             </div>
             <Button
               onClick={() => setShowComplaintForm(!showComplaintForm)}
-              variant="outline"
-              className="flex items-center gap-2"
+              variant="default"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
               <FileText className="w-4 h-4" />
               민원등록서식
