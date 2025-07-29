@@ -18,7 +18,7 @@ interface DutySchedule {
   duty_facility: string;
   duty_day: string;
   phone_number: string;
-  notes?: string;
+  remarks?: string;
 }
 
 interface Message {
@@ -544,10 +544,10 @@ ${complaintForm.description}
                   <div className="font-medium">{selectedDuty.phone_number}</div>
                 </div>
               </div>
-              {selectedDuty.notes && (
+              {selectedDuty.remarks && (
                 <div>
                   <Label>비고</Label>
-                  <div className="mt-1 p-2 bg-muted rounded">{selectedDuty.notes}</div>
+                  <div className="mt-1 p-2 bg-muted rounded">{selectedDuty.remarks}</div>
                 </div>
               )}
             </div>

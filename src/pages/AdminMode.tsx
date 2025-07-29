@@ -85,7 +85,8 @@ const AdminMode = () => {
       department_name: dutyForm.department,
       duty_facility: dutyForm.facility,
       duty_day: dutyForm.dutyDay,
-      phone_number: dutyForm.phone
+      phone_number: dutyForm.phone,
+      remarks: dutyForm.notes
     };
     
     const { error } = await supabase
@@ -127,7 +128,8 @@ const AdminMode = () => {
         department_name: editingDuty.department_name,
         duty_facility: editingDuty.duty_facility,
         duty_day: editingDuty.duty_day,
-        phone_number: editingDuty.phone_number
+        phone_number: editingDuty.phone_number,
+        remarks: editingDuty.remarks
       })
       .eq('id', editingDuty.id);
 
@@ -869,18 +871,29 @@ const AdminMode = () => {
                                     })}
                                   />
                                 </div>
-                                <div className="space-y-2">
-                                  <Label>연락처</Label>
-                                  <Input
-                                    value={editingDuty.phone_number}
-                                    onChange={(e) => setEditingDuty({
-                                      ...editingDuty,
-                                      phone_number: e.target.value
-                                    })}
-                                    required
-                                  />
-                                </div>
-                              </div>
+                                 <div className="space-y-2">
+                                   <Label>연락처</Label>
+                                   <Input
+                                     value={editingDuty.phone_number}
+                                     onChange={(e) => setEditingDuty({
+                                       ...editingDuty,
+                                       phone_number: e.target.value
+                                     })}
+                                     required
+                                   />
+                                 </div>
+                               </div>
+                               <div className="space-y-2">
+                                 <Label>비고</Label>
+                                 <Textarea
+                                   value={editingDuty.remarks || ''}
+                                   onChange={(e) => setEditingDuty({
+                                     ...editingDuty,
+                                     remarks: e.target.value
+                                   })}
+                                   placeholder="추가 정보나 특이사항을 입력하세요"
+                                 />
+                               </div>
                               <div className="flex gap-2">
                                 <Button type="submit" size="sm" disabled={isLoading}>
                                   {isLoading ? '저장 중...' : '저장'}
@@ -897,24 +910,30 @@ const AdminMode = () => {
                             </form>
                           ) : (
                             <div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                                <div>
-                                  <div className="text-sm font-medium text-muted-foreground">부서명</div>
-                                  <div className="font-medium">{duty.department_name}</div>
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-muted-foreground">시설명</div>
-                                  <div className="font-medium">{duty.duty_facility}</div>
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-muted-foreground">당직일</div>
-                                  <div className="font-medium">{duty.duty_day || '미지정'}</div>
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-muted-foreground">연락처</div>
-                                  <div className="font-medium">{duty.phone_number}</div>
-                                </div>
-                              </div>
+                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                 <div>
+                                   <div className="text-sm font-medium text-muted-foreground">부서명</div>
+                                   <div className="font-medium">{duty.department_name}</div>
+                                 </div>
+                                 <div>
+                                   <div className="text-sm font-medium text-muted-foreground">시설명</div>
+                                   <div className="font-medium">{duty.duty_facility}</div>
+                                 </div>
+                                 <div>
+                                   <div className="text-sm font-medium text-muted-foreground">당직일</div>
+                                   <div className="font-medium">{duty.duty_day || '미지정'}</div>
+                                 </div>
+                                 <div>
+                                   <div className="text-sm font-medium text-muted-foreground">연락처</div>
+                                   <div className="font-medium">{duty.phone_number}</div>
+                                 </div>
+                               </div>
+                               {duty.remarks && (
+                                 <div className="mb-4">
+                                   <div className="text-sm font-medium text-muted-foreground">비고</div>
+                                   <div className="font-medium">{duty.remarks}</div>
+                                 </div>
+                               )}
                               <div className="text-sm text-muted-foreground mb-4">
                                 등록일: {new Date(duty.created_at).toLocaleDateString('ko-KR', {
                                   year: 'numeric',
