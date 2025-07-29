@@ -112,6 +112,7 @@ export type Database = {
           duty_facility: string
           id: string
           phone_number: string
+          remarks: string | null
           updated_at: string
         }
         Insert: {
@@ -121,6 +122,7 @@ export type Database = {
           duty_facility: string
           id?: string
           phone_number: string
+          remarks?: string | null
           updated_at?: string
         }
         Update: {
@@ -130,6 +132,7 @@ export type Database = {
           duty_facility?: string
           id?: string
           phone_number?: string
+          remarks?: string | null
           updated_at?: string
         }
         Relationships: []
