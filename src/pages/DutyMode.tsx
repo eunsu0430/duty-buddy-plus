@@ -63,6 +63,21 @@ const DutyMode = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // 현재 요일과 당직일을 비교해서 통화가능한지 판단하는 함수
+  const isDutyAvailable = (dutyDay: string) => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0=일요일, 1=월요일, ..., 6=토요일
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const currentDayName = dayNames[currentDay];
+    
+    if (!dutyDay) return false;
+    
+    // 당직일이 현재 요일을 포함하는지 확인
+    return dutyDay.includes(currentDayName) || 
+           dutyDay.includes('공휴일') || 
+           dutyDay.includes('매일');
+  };
+
   useEffect(() => {
     fetchDutySchedules();
     fetchWeather();
@@ -345,23 +360,31 @@ ${complaintForm.description}
             <CardContent className="p-0">
               <ScrollArea className="h-[calc(100vh-280px)]">
                 <div className="space-y-2 p-4">
-                  {dutySchedules.map((duty) => (
-                    <div
-                      key={duty.id}
-                      className="p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
-                      onDoubleClick={() => setSelectedDuty(duty)}
-                    >
-                      <div className="font-medium">{duty.department_name}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                        <Calendar className="w-3 h-3" />
-                        {duty.duty_day}
+                  {dutySchedules.map((duty) => {
+                    const isAvailable = isDutyAvailable(duty.duty_day);
+                    return (
+                      <div
+                        key={duty.id}
+                        className="p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                        onDoubleClick={() => setSelectedDuty(duty)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-medium">{duty.department_name}</div>
+                          <div className={`w-3 h-3 rounded-full ${
+                            isAvailable ? 'bg-blue-500' : 'bg-red-500'
+                          }`} />
+                        </div>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                          <Calendar className="w-3 h-3" />
+                          {duty.duty_day}
+                        </div>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Phone className="w-3 h-3" />
+                          {duty.phone_number}
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Phone className="w-3 h-3" />
-                        {duty.phone_number}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </ScrollArea>
             </CardContent>
