@@ -42,12 +42,21 @@ interface ComplaintType {
   type: string;
   count: number;
   recentComplaint: string;
+  similarComplaints?: any[];
 }
 
 interface SimilarComplaint {
   id: string;
   content: string;
   title: string;
+  similarity: number;
+  metadata: any;
+}
+
+interface DetailedComplaint {
+  id: string;
+  title: string;
+  content: string;
   similarity: number;
   metadata: any;
 }
@@ -79,6 +88,8 @@ const DutyMode = () => {
   const [selectedComplaintType, setSelectedComplaintType] = useState<string | null>(null);
   const [similarComplaints, setSimilarComplaints] = useState<SimilarComplaint[]>([]);
   const [showSimilarDialog, setShowSimilarDialog] = useState(false);
+  const [selectedDetailComplaint, setSelectedDetailComplaint] = useState<DetailedComplaint | null>(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -155,98 +166,100 @@ const DutyMode = () => {
     };
   }, []);
 
-  // 최근 한달간 민원 데이터에서 상위 5개 유형 가져오기
+  // 월별 빈발 민원 유형 가져오기 (개선된 성능)
   const fetchTopComplaintTypes = async () => {
     try {
-      // 최근 30일간의 민원 데이터 가져오기
-      const { data: complaints, error } = await supabase
-        .from('civil_complaints_vectors')
-        .select('title, content, metadata')
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .limit(1000);
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      // 현재 월의 데이터가 있는지 확인, 없으면 전월 데이터 사용
+      let { data: complaints, error } = await supabase
+        .from('monthly_frequent_complaints')
+        .select('complaint_type, count, rank, similar_complaints')
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .order('rank', { ascending: true });
 
-      if (error) {
-        console.error('민원 데이터 조회 실패:', error);
-        return;
+      if (error || !complaints || complaints.length === 0) {
+        // 현재 월 데이터가 없으면 전월 데이터 사용
+        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        
+        const { data: prevComplaints, error: prevError } = await supabase
+          .from('monthly_frequent_complaints')
+          .select('complaint_type, count, rank, similar_complaints')
+          .eq('year', prevYear)
+          .eq('month', prevMonth)
+          .order('rank', { ascending: true });
+
+        if (prevError) throw prevError;
+        complaints = prevComplaints || [];
       }
 
-      if (!complaints || complaints.length === 0) {
-        console.log('최근 민원 데이터가 없습니다.');
-        return;
-      }
+      const formattedComplaints = complaints.map(complaint => ({
+        type: complaint.complaint_type,
+        count: complaint.count,
+        recentComplaint: `${complaint.count}건의 유사 민원이 있습니다.`,
+        similarComplaints: Array.isArray(complaint.similar_complaints) ? complaint.similar_complaints : []
+      }));
 
-      // 민원 유형별로 그룹핑 (키워드 기반)
-      const typeGroups: { [key: string]: { count: number; recentComplaint: string } } = {};
-      const typeKeywords = {
-        '소음': ['소음', '시끄', '층간', '음향', '비트', '드럼', '스피커', '음악'],
-        '환경/쓰레기': ['쓰레기', '폐기물', '환경', '청소', '냄새', '악취', '오염'],
-        '시설/수리': ['수리', '고장', '시설', '보수', '파손', '정비', '설비', '전기', '배관'],
-        '교통': ['주차', '교통', '신호등', '도로', '버스', '택시', '차량', '보행'],
-        '복지': ['복지', '지원', '혜택', '수당', '급여', '연금', '의료', '건강']
-      };
-
-      complaints.forEach(complaint => {
-        const content = (complaint.title + ' ' + complaint.content).toLowerCase();
-        let matchedType = '기타';
-
-        // 키워드 매칭으로 유형 분류
-        for (const [type, keywords] of Object.entries(typeKeywords)) {
-          if (keywords.some(keyword => content.includes(keyword))) {
-            matchedType = type;
-            break;
-          }
-        }
-
-        if (!typeGroups[matchedType]) {
-          typeGroups[matchedType] = { count: 0, recentComplaint: '' };
-        }
-        typeGroups[matchedType].count++;
-        if (!typeGroups[matchedType].recentComplaint) {
-          typeGroups[matchedType].recentComplaint = complaint.title || complaint.content.substring(0, 50);
-        }
-      });
-
-      // 빈도 순으로 정렬하여 상위 5개 선택
-      const sortedTypes = Object.entries(typeGroups)
-        .map(([type, info]) => ({
-          type,
-          count: info.count,
-          recentComplaint: info.recentComplaint
-        }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
-      setTopComplaintTypes(sortedTypes);
+      setTopComplaintTypes(formattedComplaints);
     } catch (error) {
-      console.error('인기 민원 유형 조회 중 오류:', error);
+      console.error('빈발 민원 유형 조회 중 오류:', error);
+      // 실패시 빈 배열로 설정
+      setTopComplaintTypes([]);
     }
   };
 
-  // 특정 유형의 유사 민원들 가져오기
+  // 특정 유형의 유사 민원들 가져오기 (월별 테이블에서)
   const fetchSimilarComplaintsByType = async (complaintType: string) => {
     try {
       setIsLoading(true);
       
-      // 해당 유형의 키워드를 포함하는 민원들을 벡터 검색으로 찾기
-      const { data, error } = await supabase.functions.invoke('chat-bot', {
-        body: { 
-          message: complaintType + ' 관련 민원',
-          getSimilarOnly: true
+      // 해당 유형의 미리 계산된 유사 민원 데이터 가져오기
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      // 현재 월 또는 전월 데이터에서 해당 유형 찾기
+      let { data: monthlyData, error } = await supabase
+        .from('monthly_frequent_complaints')
+        .select('similar_complaints')
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .eq('complaint_type', complaintType)
+        .single();
+
+      if (error || !monthlyData) {
+        // 현재 월 데이터가 없으면 전월 데이터 시도
+        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        
+        const { data: prevMonthData, error: prevError } = await supabase
+          .from('monthly_frequent_complaints')
+          .select('similar_complaints')
+          .eq('year', prevYear)
+          .eq('month', prevMonth)
+          .eq('complaint_type', complaintType)
+          .single();
+
+        if (prevError || !prevMonthData) {
+          throw new Error('해당 유형의 데이터를 찾을 수 없습니다.');
         }
-      });
+        monthlyData = prevMonthData;
+      }
 
-      if (error) throw error;
-
-      if (data.similarComplaints && data.similarComplaints.length > 0) {
-        const similar = data.similarComplaints
-          .slice(0, 6)
-          .map((complaint: any) => ({
-            id: complaint.id,
-            content: complaint.content,
-            title: complaint.title,
-            similarity: complaint.similarity,
-            metadata: complaint.metadata
-          }));
+      const similarData = monthlyData.similar_complaints as any[];
+      
+      if (similarData && similarData.length > 0) {
+        const similar = similarData.map((complaint: any) => ({
+          id: complaint.id,
+          content: complaint.content,
+          title: complaint.title,
+          similarity: complaint.similarity,
+          metadata: complaint.metadata || {}
+        }));
         
         setSimilarComplaints(similar);
         setSelectedComplaintType(complaintType);
@@ -268,6 +281,18 @@ const DutyMode = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 개별 민원 상세 정보 조회
+  const handleComplaintDetailClick = (complaint: SimilarComplaint) => {
+    setSelectedDetailComplaint({
+      id: complaint.id,
+      title: complaint.title,
+      content: complaint.content,
+      similarity: complaint.similarity,
+      metadata: complaint.metadata
+    });
+    setShowDetailDialog(true);
   };
 
   const fetchWeather = async () => {
@@ -793,7 +818,9 @@ ${complaintForm.description}
               {similarComplaints.map((complaint, index) => (
                 <div
                   key={complaint.id}
-                  className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                  onDoubleClick={() => handleComplaintDetailClick(complaint)}
+                  title="더블클릭하면 상세정보를 볼 수 있습니다"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -818,6 +845,9 @@ ${complaintForm.description}
                         ? complaint.content.substring(0, 200) + '...'
                         : complaint.content}
                     </div>
+                    <div className="text-xs text-blue-600 mt-2 font-medium">
+                      💡 더블클릭하면 전체 내용을 볼 수 있습니다
+                    </div>
                   </div>
                   
                   {complaint.metadata && (
@@ -840,6 +870,102 @@ ${complaintForm.description}
             <Button 
               variant="outline" 
               onClick={() => setShowSimilarDialog(false)}
+            >
+              닫기
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detailed Complaint Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              📄 민원 상세 정보
+            </DialogTitle>
+            <DialogDescription>
+              민원의 전체 내용과 관련 정보를 확인할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDetailComplaint && (
+            <ScrollArea className="max-h-[70vh]">
+              <div className="space-y-6">
+                {/* 기본 정보 */}
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground">민원 ID</Label>
+                    <div className="font-mono text-sm">{selectedDetailComplaint.id}</div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground">유사도</Label>
+                    <div className="text-sm font-medium text-primary">
+                      {(selectedDetailComplaint.similarity * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* 제목 */}
+                <div>
+                  <Label className="text-sm font-semibold text-foreground">제목</Label>
+                  <div className="mt-1 p-3 bg-background border rounded-lg">
+                    <div className="font-medium">
+                      {selectedDetailComplaint.title || '제목이 없습니다'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 내용 */}
+                <div>
+                  <Label className="text-sm font-semibold text-foreground">민원 내용</Label>
+                  <div className="mt-1 p-4 bg-background border rounded-lg">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {selectedDetailComplaint.content}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 메타데이터 */}
+                {selectedDetailComplaint.metadata && Object.keys(selectedDetailComplaint.metadata).length > 0 && (
+                  <div>
+                    <Label className="text-sm font-semibold text-foreground">추가 정보</Label>
+                    <div className="mt-1 p-4 bg-muted/30 rounded-lg">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        {selectedDetailComplaint.metadata.department && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">처리부서:</span>
+                            <span className="ml-2">{selectedDetailComplaint.metadata.department}</span>
+                          </div>
+                        )}
+                        {selectedDetailComplaint.metadata.status && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">처리상태:</span>
+                            <span className="ml-2">{selectedDetailComplaint.metadata.status}</span>
+                          </div>
+                        )}
+                        {selectedDetailComplaint.metadata.date && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">등록일:</span>
+                            <span className="ml-2">{selectedDetailComplaint.metadata.date}</span>
+                          </div>
+                        )}
+                        {selectedDetailComplaint.metadata.serialNumber && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">접수번호:</span>
+                            <span className="ml-2">{selectedDetailComplaint.metadata.serialNumber}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+          <div className="flex justify-end gap-2 mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDetailDialog(false)}
             >
               닫기
             </Button>
