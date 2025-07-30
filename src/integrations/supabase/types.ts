@@ -191,6 +191,42 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_frequent_complaints: {
+        Row: {
+          complaint_type: string
+          count: number
+          created_at: string
+          id: string
+          month: number
+          rank: number
+          similar_complaints: Json | null
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          complaint_type: string
+          count?: number
+          created_at?: string
+          id?: string
+          month: number
+          rank: number
+          similar_complaints?: Json | null
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          complaint_type?: string
+          count?: number
+          created_at?: string
+          id?: string
+          month?: number
+          rank?: number
+          similar_complaints?: Json | null
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
       training_materials: {
         Row: {
           content: string
