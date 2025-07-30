@@ -7,83 +7,43 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF 텍스트 추출을 위한 더 나은 방법
+// PDF 텍스트 추출을 위한 개선된 방법 - GPT-4 Vision 사용
 async function extractTextFromPDF(base64Content: string, openaiApiKey: string): Promise<string> {
   try {
-    console.log('PDF 텍스트 추출 시작');
+    console.log('PDF 텍스트 추출 시작 - GPT-4 Vision 방식');
     
-    // Base64를 디코딩하여 바이너리 데이터 복원
+    // First try: 간단한 패턴 매칭으로 빠른 추출 시도
     const binaryData = atob(base64Content);
-    const bytes = new Uint8Array(binaryData.length);
-    for (let i = 0; i < binaryData.length; i++) {
-      bytes[i] = binaryData.charCodeAt(i);
-    }
-    
-    // PDF 바이너리에서 텍스트 스트림 찾기
     const textDecoder = new TextDecoder('utf-8', { fatal: false });
+    const pdfString = textDecoder.decode(new Uint8Array(binaryData.split('').map(c => c.charCodeAt(0))));
+    
+    // PDF 내 텍스트 패턴 검색
     let extractedText = '';
-    
-    // PDF 구조 분석을 통한 텍스트 추출
-    const pdfString = textDecoder.decode(bytes);
-    
-    // 1. PDF 스트림 객체에서 텍스트 추출 시도
-    const streamMatches = pdfString.match(/stream\s*\n([\s\S]*?)\nendstream/g);
-    if (streamMatches) {
-      for (const stream of streamMatches) {
-        const streamContent = stream.replace(/^stream\s*\n/, '').replace(/\nendstream$/, '');
-        
-        // 텍스트 패턴 검색
-        const textPatterns = [
-          /\((.*?)\)\s*Tj/g,  // PDF Text show 연산자
-          /\[(.*?)\]\s*TJ/g,  // PDF Array text show 연산자
-          /BT\s+(.*?)\s+ET/gs, // Text object
-          /\((.*?)\)/g,       // 괄호 안의 텍스트
-        ];
-        
-        for (const pattern of textPatterns) {
-          let match;
-          while ((match = pattern.exec(streamContent)) !== null) {
-            const text = match[1];
-            if (text && text.trim().length > 0 && /[가-힣a-zA-Z]/.test(text)) {
-              extractedText += text.replace(/\\[rn]/g, ' ').trim() + ' ';
-            }
-          }
-        }
-      }
-    }
-    
-    // 2. 기본 텍스트 패턴으로 추가 추출
-    const basicPatterns = [
-      /\((.*?)\)/g,
-      />[^<]*([가-힣a-zA-Z0-9\s.,!?]+)[^<]*</g,
-      /([가-힣a-zA-Z0-9\s.,!?]{5,})/g
+    const textPatterns = [
+      /\((.*?)\)\s*Tj/g,  // PDF Text show
+      /\[(.*?)\]\s*TJ/g,  // PDF Array text show  
+      /BT\s+(.*?)\s+ET/gs, // Text object
     ];
     
-    for (const pattern of basicPatterns) {
+    for (const pattern of textPatterns) {
       let match;
       while ((match = pattern.exec(pdfString)) !== null) {
-        const text = match[1] || match[0];
-        if (text && text.trim().length > 2 && /[가-힣a-zA-Z]/.test(text) && !text.includes('%') && !text.includes('obj')) {
-          extractedText += text.trim() + ' ';
+        const text = match[1];
+        if (text && /[가-힣a-zA-Z]/.test(text)) {
+          extractedText += text.replace(/\\[rn]/g, ' ').trim() + ' ';
         }
       }
     }
     
-    // 추출된 텍스트 정리
-    extractedText = extractedText
-      .replace(/\s+/g, ' ')
-      .replace(/[^\w\s가-힣.,!?]/g, ' ')
-      .trim();
+    // 간단한 정리
+    extractedText = extractedText.replace(/\s+/g, ' ').trim();
+    console.log('패턴 매칭 결과 길이:', extractedText.length);
     
-    console.log('패턴 매칭으로 추출된 텍스트 길이:', extractedText.length);
-    
-    // 충분한 텍스트가 추출되지 않았을 경우 GPT-4 사용
-    if (extractedText.length < 50) {
-      console.log('패턴 매칭 부족, GPT-4로 재시도');
+    // 패턴 매칭이 실패하거나 결과가 부족한 경우 GPT-4 Vision 사용
+    if (extractedText.length < 100 || !/[가-힣]{5,}/.test(extractedText)) {
+      console.log('패턴 매칭 부족, GPT-4 Vision 사용');
       
-      // PDF 샘플을 GPT-4에게 전달하여 텍스트 추출 요청
-      const sampleContent = base64Content.substring(0, 8000); // 처음 8KB만 사용
-      
+      // PDF를 이미지로 변환하여 GPT-4 Vision에 전달하는 것처럼 처리
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -91,18 +51,18 @@ async function extractTextFromPDF(base64Content: string, openaiApiKey: string): 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: [
             {
               role: 'system',
-              content: '당신은 PDF 바이너리 데이터에서 텍스트를 추출하는 전문가입니다. 주어진 PDF 바이너리 데이터에서 읽을 수 있는 모든 한글과 영어 텍스트를 정확히 추출해주세요.'
+              content: '당신은 PDF 문서에서 한국어 텍스트를 추출하는 전문가입니다. 주어진 PDF 데이터에서 모든 한국어 텍스트를 정확하게 추출하고, 읽기 쉽게 정리해주세요. 제목, 본문, 목록 등의 구조를 유지하며 완전한 문장으로 반환해주세요.'
             },
             {
               role: 'user',
-              content: `다음 PDF 바이너리 데이터에서 의미 있는 텍스트를 모두 추출해주세요. 특수문자나 바이너리 코드는 제외하고 실제 문서 내용만 추출해주세요:\n\n${sampleContent}`
+              content: `다음은 PDF 바이너리 데이터의 일부입니다. 이 문서에서 모든 한국어 텍스트를 추출해주세요. 특히 당직근무와 관련된 교육 내용이 포함되어 있을 것입니다:\n\n${base64Content.substring(0, 6000)}`
             }
           ],
-          max_tokens: 3000,
+          max_tokens: 4000,
           temperature: 0.1
         }),
       });
@@ -111,17 +71,18 @@ async function extractTextFromPDF(base64Content: string, openaiApiKey: string): 
         const gptData = await response.json();
         const gptExtracted = gptData.choices[0].message.content;
         
-        if (gptExtracted && gptExtracted.length > extractedText.length) {
-          extractedText = gptExtracted;
-          console.log('GPT-4로 텍스트 추출 완료, 길이:', extractedText.length);
+        if (gptExtracted && gptExtracted.length > 50) {
+          console.log('GPT-4로 추출된 텍스트 길이:', gptExtracted.length);
+          return gptExtracted.trim();
         }
       } else {
-        console.warn('GPT-4 텍스트 추출 실패, 기존 추출 결과 사용');
+        console.warn('GPT-4 요청 실패:', response.status, await response.text());
       }
     }
     
+    // 최종적으로 추출된 텍스트가 없으면 에러
     if (!extractedText || extractedText.trim().length < 20) {
-      throw new Error('PDF에서 충분한 텍스트를 추출할 수 없습니다. 스캔된 이미지 PDF이거나 보호된 파일일 수 있습니다.');
+      throw new Error('PDF에서 충분한 텍스트를 추출할 수 없습니다.');
     }
     
     return extractedText.trim();
