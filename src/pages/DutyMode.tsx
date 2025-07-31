@@ -494,27 +494,37 @@ ${complaintForm.description}
     });
   };
 
-  // 7월 데이터 분석 테스트 함수
-  const testJulyAnalysis = async () => {
+  // 이달의 데이터 분석 함수
+  const analyzeCurrentMonth = async () => {
     try {
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
       toast({
         title: "분석 시작",
-        description: "7월 데이터 분석을 시작합니다...",
+        description: `${currentYear}년 ${currentMonth}월 데이터 분석을 시작합니다...`,
       });
       
-      const { data, error } = await supabase.functions.invoke('test-july-analysis');
+      const { data, error } = await supabase.functions.invoke('analyze-monthly-complaints', {
+        body: {
+          year: currentYear,
+          month: currentMonth
+        }
+      });
+      
       if (error) {
-        console.error('7월 분석 오류:', error);
+        console.error('이달 분석 오류:', error);
         toast({
           title: "분석 실패",
-          description: "7월 데이터 분석 중 오류가 발생했습니다.",
+          description: "이달 데이터 분석 중 오류가 발생했습니다.",
           variant: "destructive"
         });
       } else {
-        console.log('7월 분석 완료:', data);
+        console.log('이달 분석 완료:', data);
         toast({
           title: "분석 완료",
-          description: "7월 데이터 분석이 완료되었습니다.",
+          description: "이달 데이터 분석이 완료되었습니다.",
         });
         // 데이터 새로고침
         fetchTopComplaintTypes();
@@ -561,13 +571,12 @@ ${complaintForm.description}
               <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
             <Button
-
-              onClick={testJulyAnalysis}
+              onClick={analyzeCurrentMonth}
               variant="destructive"
               size="sm"
               className="flex items-center gap-2"
             >
-              🔧 7월 데이터 분석
+              📊 이달의 분석
             </Button>
             <Button
               onClick={() => setShowComplaintForm(!showComplaintForm)}
