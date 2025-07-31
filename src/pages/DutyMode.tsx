@@ -710,27 +710,26 @@ ${complaintForm.description}
             {topComplaintTypes.length > 0 && (
               <div className="border-b bg-muted/30 p-4">
                 <div className="text-sm font-medium text-muted-foreground mb-3">
-                  📊 이달의 빈발 민원 유형 상위 5개 (클릭하면 유사민원 확인)
+                  📊 이달의 빈발 민원 유형 상위 5개 (더블클릭하면 유사민원 확인)
                 </div>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="flex gap-3 overflow-x-auto pb-2">
                   {topComplaintTypes.map((complaint, index) => (
                     <Card
                       key={complaint.type}
-                      className="p-3 cursor-pointer hover:bg-primary/5 transition-colors border-l-4 border-l-primary"
-                      onClick={() => fetchSimilarComplaintsByType(complaint.type)}
+                      className="flex-shrink-0 min-w-[200px] p-3 cursor-pointer hover:bg-primary/5 transition-colors border-l-4 border-l-primary"
+                      onDoubleClick={() => fetchSimilarComplaintsByType(complaint.type)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <span className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
                             {index + 1}
                           </span>
-                          <div>
-                            <div className="font-medium text-sm">{complaint.type}</div>
-                            <div className="text-xs text-muted-foreground">{complaint.recentComplaint}</div>
+                          <div className="bg-destructive/10 text-destructive px-2 py-1 rounded text-sm font-semibold">
+                            {complaint.count}건
                           </div>
                         </div>
-                        <div className="bg-destructive/10 text-destructive px-2 py-1 rounded text-sm font-semibold">
-                          {complaint.count}건
+                        <div className="font-medium text-sm text-center break-words">
+                          {complaint.type}
                         </div>
                       </div>
                     </Card>
@@ -931,8 +930,8 @@ ${complaintForm.description}
                 <div
                   key={complaint.id}
                   className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onDoubleClick={() => handleComplaintDetailClick(complaint)}
-                  title="더블클릭하면 상세정보를 볼 수 있습니다"
+                  onClick={() => handleComplaintDetailClick(complaint)}
+                  title="클릭하면 상세정보를 볼 수 있습니다"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
