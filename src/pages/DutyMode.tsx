@@ -505,35 +505,70 @@ ${complaintForm.description}
         title: "분석 시작",
         description: `${currentYear}년 ${currentMonth}월 데이터 분석을 시작합니다...`,
       });
+
+      // 현재 월의 민원 데이터를 유형별로 직접 분석
+      const monthStr = currentMonth.toString().padStart(2, '0');
+      const { data: vectorData, error } = await supabase
+        .from('civil_complaints_vectors')
+        .select('content')
+        .like('metadata->date', `${currentYear}-${monthStr}%`);
+
+      if (error) throw error;
+
+      // 클라이언트에서 유형별 분류
+      const typeCount: { [key: string]: { count: number; examples: string[] } } = {};
       
-      const { data, error } = await supabase.functions.invoke('analyze-monthly-complaints', {
-        body: {
-          year: currentYear,
-          month: currentMonth
+      vectorData?.forEach(row => {
+        let type = '기타';
+        if (row.content.includes('도로') || row.content.includes('도로파손') || row.content.includes('반사경') || row.content.includes('교차로') || row.content.includes('도로과')) {
+          type = '도로관련';
+        } else if (row.content.includes('수도') || row.content.includes('누수') || row.content.includes('수도관') || row.content.includes('수도과')) {
+          type = '수도관련';
+        } else if (row.content.includes('동물') || row.content.includes('유기견') || row.content.includes('보호소') || row.content.includes('로드킬')) {
+          type = '동물관련';
+        } else if (row.content.includes('쓰레기') || row.content.includes('폐기물') || row.content.includes('환경') || row.content.includes('청소')) {
+          type = '환경/쓰레기';
+        } else if (row.content.includes('주차') || row.content.includes('불법주차') || row.content.includes('차량')) {
+          type = '주차/교통';
+        } else if (row.content.includes('소음') || row.content.includes('시끄러운') || row.content.includes('공사')) {
+          type = '소음공해';
+        } else if (row.content.includes('전기') || row.content.includes('가로등') || row.content.includes('조명')) {
+          type = '전기/조명';
+        } else if (row.content.includes('민원접수') || row.content.includes('문의') || row.content.includes('안내')) {
+          type = '단순문의';
+        }
+
+        if (!typeCount[type]) {
+          typeCount[type] = { count: 0, examples: [] };
+        }
+        typeCount[type].count++;
+        if (typeCount[type].examples.length < 1) {
+          typeCount[type].examples.push(row.content.substring(0, 100) + '...');
         }
       });
-      
-      if (error) {
-        console.error('이달 분석 오류:', error);
-        toast({
-          title: "분석 실패",
-          description: "이달 데이터 분석 중 오류가 발생했습니다.",
-          variant: "destructive"
-        });
-      } else {
-        console.log('이달 분석 완료:', data);
-        toast({
-          title: "분석 완료",
-          description: "이달 데이터 분석이 완료되었습니다.",
-        });
-        // 데이터 새로고침
-        fetchTopComplaintTypes();
-      }
-    } catch (error) {
-      console.error('함수 호출 오류:', error);
+
+      // 상위 5개 유형으로 변환
+      const topTypes = Object.entries(typeCount)
+        .sort(([,a], [,b]) => b.count - a.count)
+        .slice(0, 5)
+        .map(([type, data]) => ({
+          type,
+          count: data.count,
+          recentComplaint: data.examples[0] || '내용 없음'
+        }));
+
+      setTopComplaintTypes(topTypes);
+
       toast({
-        title: "함수 호출 실패",
-        description: "함수 호출 중 오류가 발생했습니다.",
+        title: "분석 완료",
+        description: `${currentYear}년 ${currentMonth}월 빈발 민원 상위 5개 유형을 분석했습니다.`,
+      });
+
+    } catch (error) {
+      console.error('월별 분석 오류:', error);
+      toast({
+        title: "분석 실패",
+        description: "데이터 분석 중 오류가 발생했습니다.",
         variant: "destructive"
       });
     }
