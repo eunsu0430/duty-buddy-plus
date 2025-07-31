@@ -500,41 +500,60 @@ ${complaintForm.description}
       const currentDate = new Date();
       const currentYear = currentDate.getFullYear();
       const currentMonth = currentDate.getMonth() + 1;
+      const monthStr = currentMonth.toString().padStart(2, '0');
       
       toast({
         title: "분석 시작",
         description: `${currentYear}년 ${currentMonth}월 데이터 분석을 시작합니다...`,
       });
 
-      // 현재 월의 민원 데이터를 유형별로 직접 분석
-      const monthStr = currentMonth.toString().padStart(2, '0');
+      console.log(`현재 월 데이터 분석: ${currentYear}-${monthStr}`);
+
+      // civil_complaints_vectors 테이블에서 현재 월의 데이터만 가져오기
       const { data: vectorData, error } = await supabase
         .from('civil_complaints_vectors')
-        .select('content')
-        .like('metadata->date', `${currentYear}-${monthStr}%`);
+        .select('content, metadata')
+        .gte('metadata->date', `${currentYear}-${monthStr}-01`)
+        .lt('metadata->date', `${currentYear}-${monthStr.padStart(2, '0')}-32`);
 
-      if (error) throw error;
+      if (error) {
+        console.error('데이터 조회 오류:', error);
+        throw error;
+      }
+
+      console.log(`${currentYear}년 ${currentMonth}월 데이터 수:`, vectorData?.length || 0);
+
+      if (!vectorData || vectorData.length === 0) {
+        toast({
+          title: "데이터 없음",
+          description: `${currentYear}년 ${currentMonth}월에 해당하는 민원 데이터가 없습니다.`,
+          variant: "destructive"
+        });
+        return;
+      }
 
       // 클라이언트에서 유형별 분류
       const typeCount: { [key: string]: { count: number; examples: string[] } } = {};
       
-      vectorData?.forEach(row => {
+      vectorData.forEach(row => {
         let type = '기타';
-        if (row.content.includes('도로') || row.content.includes('도로파손') || row.content.includes('반사경') || row.content.includes('교차로') || row.content.includes('도로과')) {
+        const content = row.content.toLowerCase();
+        
+        if (content.includes('도로') || content.includes('도로파손') || content.includes('반사경') || content.includes('교차로') || content.includes('도로과')) {
           type = '도로관련';
-        } else if (row.content.includes('수도') || row.content.includes('누수') || row.content.includes('수도관') || row.content.includes('수도과')) {
+        } else if (content.includes('수도') || content.includes('누수') || content.includes('수도관') || content.includes('수도과') || content.includes('상수도')) {
           type = '수도관련';
-        } else if (row.content.includes('동물') || row.content.includes('유기견') || row.content.includes('보호소') || row.content.includes('로드킬')) {
+        } else if (content.includes('동물') || content.includes('유기견') || content.includes('보호소') || content.includes('로드킬') || content.includes('개') || content.includes('고양이')) {
           type = '동물관련';
-        } else if (row.content.includes('쓰레기') || row.content.includes('폐기물') || row.content.includes('환경') || row.content.includes('청소')) {
+        } else if (content.includes('쓰레기') || content.includes('폐기물') || content.includes('환경') || content.includes('청소') || content.includes('분리수거')) {
           type = '환경/쓰레기';
-        } else if (row.content.includes('주차') || row.content.includes('불법주차') || row.content.includes('차량')) {
+        } else if (content.includes('주차') || content.includes('불법주차') || content.includes('차량') || content.includes('교통')) {
           type = '주차/교통';
-        } else if (row.content.includes('소음') || row.content.includes('시끄러운') || row.content.includes('공사')) {
+        } else if (content.includes('소음') || content.includes('시끄러운') || content.includes('공사') || content.includes('시끄')) {
           type = '소음공해';
-        } else if (row.content.includes('전기') || row.content.includes('가로등') || row.content.includes('조명')) {
+        } else if (content.includes('전기') || content.includes('가로등') || content.includes('조명') || content.includes('전등')) {
           type = '전기/조명';
-        } else if (row.content.includes('민원접수') || row.content.includes('문의') || row.content.includes('안내')) {
+        } else if (content.includes('문의') || content.includes('안내') || content.includes('신고') || content.includes('민원접수')) {
           type = '단순문의';
         }
 
@@ -542,8 +561,8 @@ ${complaintForm.description}
           typeCount[type] = { count: 0, examples: [] };
         }
         typeCount[type].count++;
-        if (typeCount[type].examples.length < 1) {
-          typeCount[type].examples.push(row.content.substring(0, 100) + '...');
+        if (typeCount[type].examples.length < 3) {
+          typeCount[type].examples.push(row.content.substring(0, 150).replace(/\n/g, ' ') + '...');
         }
       });
 
@@ -557,11 +576,12 @@ ${complaintForm.description}
           recentComplaint: data.examples[0] || '내용 없음'
         }));
 
+      console.log('분석된 유형별 데이터:', topTypes);
       setTopComplaintTypes(topTypes);
 
       toast({
         title: "분석 완료",
-        description: `${currentYear}년 ${currentMonth}월 빈발 민원 상위 5개 유형을 분석했습니다.`,
+        description: `${currentYear}년 ${currentMonth}월 민원 ${vectorData.length}건을 분석하여 상위 5개 유형을 확인했습니다.`,
       });
 
     } catch (error) {
