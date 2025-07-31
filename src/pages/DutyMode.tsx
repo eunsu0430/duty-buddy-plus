@@ -514,7 +514,7 @@ ${complaintForm.description}
         .from('civil_complaints_vectors')
         .select('content, metadata')
         .gte('metadata->date', `${currentYear}-${monthStr}-01`)
-        .lt('metadata->date', `${currentYear}-${monthStr.padStart(2, '0')}-32`);
+        .lte('metadata->date', `${currentYear}-${monthStr}-31`);
 
       if (error) {
         console.error('데이터 조회 오류:', error);
