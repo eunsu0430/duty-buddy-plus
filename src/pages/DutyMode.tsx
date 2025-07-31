@@ -513,8 +513,8 @@ ${complaintForm.description}
       const { data: vectorData, error } = await supabase
         .from('civil_complaints_vectors')
         .select('content, metadata')
-        .gte('metadata->date', `${currentYear}-${monthStr}-01`)
-        .lte('metadata->date', `${currentYear}-${monthStr}-31`);
+        .filter('metadata->>date', 'gte', `${currentYear}-${monthStr.padStart(2, '0')}-01`)
+        .filter('metadata->>date', 'lte', `${currentYear}-${monthStr.padStart(2, '0')}-31`);
 
       if (error) {
         console.error('데이터 조회 오류:', error);
