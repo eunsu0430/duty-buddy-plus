@@ -19,6 +19,7 @@ serve(async (req) => {
     );
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    console.log('OpenAI API 키 확인:', openaiApiKey ? 'API 키 존재함' : 'API 키 없음');
     if (!openaiApiKey) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
