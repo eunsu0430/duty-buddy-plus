@@ -20,26 +20,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
-    // 7월 데이터 분석 및 삽입 (기존 데이터 덮어쓰기)
-    const response = await supabaseClient.functions.invoke('analyze-monthly-complaints', {
-      body: {
+    // 7월 데이터 분석 함수 직접 호출
+    console.log('7월 빈발 민원 데이터 재분석 시작');
+    
+    const analyzeResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-monthly-complaints`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+      },
+      body: JSON.stringify({
         year: 2025,
         month: 7
-      }
+      })
     });
 
-    const { data, error } = response;
-    if (error) {
-      console.error('7월 데이터 분석 호출 오류:', error);
-      throw new Error(error.message);
+    if (!analyzeResponse.ok) {
+      throw new Error(`분석 함수 호출 실패: ${analyzeResponse.status}`);
     }
-    
-    console.log('7월 데이터 분석 결과:', data);
+
+    const analyzeResult = await analyzeResponse.json();
+    console.log('7월 데이터 분석 결과:', analyzeResult);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '7월 빈발 민원 데이터 분석이 완료되었습니다.',
-      result: data
+      message: '7월 빈발 민원 데이터 재분석이 완료되었습니다.',
+      result: analyzeResult
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
