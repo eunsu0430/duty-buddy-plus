@@ -103,6 +103,7 @@ serve(async (req) => {
       
       try {
         // 임베딩 생성
+        console.log(`임베딩 생성 중: ${searchQuery}`);
         const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: {
@@ -118,6 +119,7 @@ serve(async (req) => {
         if (embeddingResponse.ok) {
           const embeddingData = await embeddingResponse.json();
           const queryVector = embeddingData.data[0].embedding;
+          console.log(`임베딩 생성 성공`);
 
           // 유사 민원 검색
           const { data: similarComplaints, error: searchError } = await supabaseClient
@@ -127,7 +129,9 @@ serve(async (req) => {
               match_count: 10
             });
 
-          if (!searchError && similarComplaints) {
+          console.log(`유사 민원 검색 결과: ${similarComplaints?.length || 0}개`);
+          
+          if (!searchError && similarComplaints && similarComplaints.length > 0) {
             insertData.push({
               year: actualYear,
               month: targetMonth,
@@ -141,7 +145,27 @@ serve(async (req) => {
                 similarity: Math.round(sc.similarity * 100) / 100
               }))
             });
+          } else {
+            console.log(`유사 민원 검색 실패 또는 결과 없음: ${searchError?.message || '결과 없음'}`);
+            insertData.push({
+              year: actualYear,
+              month: targetMonth,
+              complaint_type: complaintType,
+              count: typeComplaints.length,
+              rank: i + 1,
+              similar_complaints: []
+            });
           }
+        } else {
+          console.log(`임베딩 생성 실패: ${embeddingResponse.status}`);
+          insertData.push({
+            year: actualYear,
+            month: targetMonth,
+            complaint_type: complaintType,
+            count: typeComplaints.length,
+            rank: i + 1,
+            similar_complaints: []
+          });
         }
       } catch (error) {
         console.error(`${complaintType} 유사 민원 검색 오류:`, error);

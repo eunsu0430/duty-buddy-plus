@@ -20,17 +20,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
-    // 7월 데이터 분석 및 삽입
-    const response = await fetch('https://rlndmoxsnccurcfpxeai.supabase.co/functions/v1/analyze-monthly-complaints', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-      },
-      body: JSON.stringify({
+    // 7월 데이터 분석 및 삽입 (기존 데이터 덮어쓰기)
+    const response = await supabaseClient.functions.invoke('analyze-monthly-complaints', {
+      body: {
         year: 2025,
         month: 7
-      })
+      }
     });
 
     const result = await response.json();
