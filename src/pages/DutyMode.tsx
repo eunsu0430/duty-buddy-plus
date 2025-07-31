@@ -655,26 +655,30 @@ ${complaintForm.description}
             {topComplaintTypes.length > 0 && (
               <div className="border-b bg-muted/30 p-4">
                 <div className="text-sm font-medium text-muted-foreground mb-3">
-                  📊 최근 한달간 빈발 민원 유형 (더블클릭하면 유사민원 확인)
+                  📊 이달의 빈발 민원 유형 상위 5개 (클릭하면 유사민원 확인)
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 gap-3">
                   {topComplaintTypes.map((complaint, index) => (
-                    <Button
+                    <Card
                       key={complaint.type}
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2 text-xs h-8 hover:bg-primary/10 border-primary/20"
-                      onDoubleClick={() => fetchSimilarComplaintsByType(complaint.type)}
-                      disabled={isLoading}
+                      className="p-3 cursor-pointer hover:bg-primary/5 transition-colors border-l-4 border-l-primary"
+                      onClick={() => fetchSimilarComplaintsByType(complaint.type)}
                     >
-                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs font-bold">
-                        {index + 1}
-                      </span>
-                      {complaint.type}
-                      <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-xs">
-                        {complaint.count}건
-                      </span>
-                    </Button>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">
+                            {index + 1}
+                          </span>
+                          <div>
+                            <div className="font-medium text-sm">{complaint.type}</div>
+                            <div className="text-xs text-muted-foreground">{complaint.recentComplaint}</div>
+                          </div>
+                        </div>
+                        <div className="bg-destructive/10 text-destructive px-2 py-1 rounded text-sm font-semibold">
+                          {complaint.count}건
+                        </div>
+                      </div>
+                    </Card>
                   ))}
                 </div>
               </div>
