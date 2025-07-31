@@ -594,6 +594,52 @@ ${complaintForm.description}
     }
   };
 
+  // 월별 분석 함수 (엣지 함수 호출)
+  const handleMonthlyAnalysis = async () => {
+    try {
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      toast({
+        title: "분석 시작",
+        description: `${currentYear}년 ${currentMonth}월 월별 민원 분석을 시작합니다...`,
+      });
+
+      const { data, error } = await supabase.functions.invoke('analyze-monthly-complaints', {
+        body: {
+          year: currentYear,
+          month: currentMonth
+        }
+      });
+
+      if (error) {
+        console.error('월별 분석 함수 호출 오류:', error);
+        throw error;
+      }
+
+      if (data.success) {
+        toast({
+          title: "분석 완료",
+          description: data.message,
+        });
+        
+        // 분석 완료 후 데이터 새로고침
+        await fetchTopComplaintTypes();
+      } else {
+        throw new Error(data.error || '분석 중 오류가 발생했습니다.');
+      }
+
+    } catch (error) {
+      console.error('월별 분석 오류:', error);
+      toast({
+        title: "분석 실패",
+        description: "월별 민원 분석 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
@@ -626,7 +672,7 @@ ${complaintForm.description}
               <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
             <Button
-              onClick={analyzeCurrentMonth}
+              onClick={handleMonthlyAnalysis}
               variant="destructive"
               size="sm"
               className="flex items-center gap-2"
