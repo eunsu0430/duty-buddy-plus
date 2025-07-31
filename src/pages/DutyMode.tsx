@@ -494,6 +494,41 @@ ${complaintForm.description}
     });
   };
 
+  // 7월 데이터 분석 테스트 함수
+  const testJulyAnalysis = async () => {
+    try {
+      toast({
+        title: "분석 시작",
+        description: "7월 데이터 분석을 시작합니다...",
+      });
+      
+      const { data, error } = await supabase.functions.invoke('test-july-analysis');
+      if (error) {
+        console.error('7월 분석 오류:', error);
+        toast({
+          title: "분석 실패",
+          description: "7월 데이터 분석 중 오류가 발생했습니다.",
+          variant: "destructive"
+        });
+      } else {
+        console.log('7월 분석 완료:', data);
+        toast({
+          title: "분석 완료",
+          description: "7월 데이터 분석이 완료되었습니다.",
+        });
+        // 데이터 새로고침
+        fetchTopComplaintTypes();
+      }
+    } catch (error) {
+      console.error('함수 호출 오류:', error);
+      toast({
+        title: "함수 호출 실패",
+        description: "함수 호출 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
@@ -525,6 +560,15 @@ ${complaintForm.description}
             <div className="flex items-center gap-2">
               <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
+            <Button
+
+              onClick={testJulyAnalysis}
+              variant="destructive"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              🔧 7월 데이터 분석
+            </Button>
             <Button
               onClick={() => setShowComplaintForm(!showComplaintForm)}
               variant="default"
