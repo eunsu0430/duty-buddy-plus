@@ -28,13 +28,18 @@ serve(async (req) => {
       }
     });
 
-    const result = await response.json();
-    console.log('7월 데이터 분석 결과:', result);
+    const { data, error } = response;
+    if (error) {
+      console.error('7월 데이터 분석 호출 오류:', error);
+      throw new Error(error.message);
+    }
+    
+    console.log('7월 데이터 분석 결과:', data);
 
     return new Response(JSON.stringify({ 
       success: true, 
       message: '7월 빈발 민원 데이터 분석이 완료되었습니다.',
-      result: result
+      result: data
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
