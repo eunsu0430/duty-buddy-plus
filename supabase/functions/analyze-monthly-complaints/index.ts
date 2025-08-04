@@ -33,63 +33,12 @@ serve(async (req) => {
 
     console.log(`${targetYear}년 ${targetMonth}월 민원 데이터 분석 시작`);
 
-    // 해당 월의 민원 데이터 조회
+    // 해당 월의 벡터 데이터 조회
     const startDate = new Date(targetYear, targetMonth - 1, 1);
     const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 
     console.log(`분석 기간: ${startDate.toISOString()} ~ ${endDate.toISOString()}`);
 
-    const { data: complaints, error: fetchError } = await supabaseClient
-      .from('civil_complaints_data')
-      .select('complaint_type, registration_info, processing_method')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
-
-    if (fetchError) {
-      console.error('민원 데이터 조회 오류:', fetchError);
-      throw fetchError;
-    }
-
-    if (!complaints || complaints.length === 0) {
-      console.log('해당 월에 민원 데이터가 없습니다.');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: '해당 월에 분석할 민원 데이터가 없습니다.' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 민원 유형별 집계
-    const typeCount: Record<string, any[]> = {};
-    
-    complaints.forEach(complaint => {
-      const type = complaint.complaint_type || '기타';
-      if (!typeCount[type]) {
-        typeCount[type] = [];
-      }
-      typeCount[type].push(complaint);
-    });
-
-    // 상위 5개 유형 선별
-    const sortedTypes = Object.entries(typeCount)
-      .sort(([,a], [,b]) => b.length - a.length)
-      .slice(0, 5);
-
-    console.log(`상위 5개 민원 유형:`, sortedTypes.map(([type, complaints]) => `${type}: ${complaints.length}건`));
-
-    // 기존 월별 데이터 삭제
-    const { error: deleteError } = await supabaseClient
-      .from('monthly_frequent_complaints')
-      .delete()
-      .eq('year', targetYear)
-      .eq('month', targetMonth);
-
-    if (deleteError) {
-      console.error('기존 데이터 삭제 오류:', deleteError);
-    }
-
-    // civil_complaints_vectors에서 해당 월의 데이터만 가져와서 유형별로 분석
     const { data: monthlyVectors, error: vectorError } = await supabaseClient
       .from('civil_complaints_vectors')
       .select('*')
@@ -115,7 +64,27 @@ serve(async (req) => {
     const typeCount: Record<string, any[]> = {};
     
     monthlyVectors.forEach(vector => {
-      const type = vector.metadata?.complaint_type || vector.title?.split(' ')[0] || '기타';
+      const content = vector.content.toLowerCase();
+      let type = '기타';
+      
+      if (content.includes('도로') || content.includes('도로파손') || content.includes('반사경') || content.includes('교차로') || content.includes('도로과')) {
+        type = '도로관련';
+      } else if (content.includes('수도') || content.includes('누수') || content.includes('수도관') || content.includes('수도과') || content.includes('상수도')) {
+        type = '수도관련';
+      } else if (content.includes('동물') || content.includes('유기견') || content.includes('보호소') || content.includes('로드킬') || content.includes('개') || content.includes('고양이')) {
+        type = '동물관련';
+      } else if (content.includes('쓰레기') || content.includes('폐기물') || content.includes('환경') || content.includes('청소') || content.includes('분리수거')) {
+        type = '환경/쓰레기';
+      } else if (content.includes('주차') || content.includes('불법주차') || content.includes('차량') || content.includes('교통')) {
+        type = '주차/교통';
+      } else if (content.includes('소음') || content.includes('시끄러운') || content.includes('공사') || content.includes('시끄')) {
+        type = '소음공해';
+      } else if (content.includes('전기') || content.includes('가로등') || content.includes('조명') || content.includes('전등')) {
+        type = '전기/조명';
+      } else if (content.includes('문의') || content.includes('안내') || content.includes('신고') || content.includes('민원접수')) {
+        type = '단순문의';
+      }
+
       if (!typeCount[type]) {
         typeCount[type] = [];
       }
@@ -128,6 +97,17 @@ serve(async (req) => {
       .slice(0, 5);
 
     console.log(`상위 5개 민원 유형:`, sortedTypes.map(([type, vectors]) => `${type}: ${vectors.length}건`));
+
+    // 기존 월별 데이터 삭제
+    const { error: deleteError } = await supabaseClient
+      .from('monthly_frequent_complaints')
+      .delete()
+      .eq('year', targetYear)
+      .eq('month', targetMonth);
+
+    if (deleteError) {
+      console.error('기존 데이터 삭제 오류:', deleteError);
+    }
 
     // 각 유형별로 유사 민원 찾기 및 저장
     const insertData = [];
@@ -234,7 +214,7 @@ serve(async (req) => {
       data: {
         year: targetYear,
         month: targetMonth,
-        analyzed_complaints: complaints.length,
+        analyzed_complaints: monthlyVectors.length,
         top_types: insertData.length
       }
     }), {
