@@ -176,7 +176,7 @@ const DutyMode = () => {
       // 현재 월의 데이터가 있는지 확인, 없으면 전월 데이터 사용
       let { data: complaints, error } = await supabase
         .from('monthly_frequent_complaints')
-        .select('complaint_type, count, rank, similar_complaints')
+        .select('complaint_type, count, rank, similar_complaint_1, similar_complaint_2, similar_complaint_3, similar_complaint_4, similar_complaint_5')
         .eq('year', currentYear)
         .eq('month', currentMonth)
         .order('rank', { ascending: true });
@@ -188,7 +188,7 @@ const DutyMode = () => {
         
         const { data: prevComplaints, error: prevError } = await supabase
           .from('monthly_frequent_complaints')
-          .select('complaint_type, count, rank, similar_complaints')
+          .select('complaint_type, count, rank, similar_complaint_1, similar_complaint_2, similar_complaint_3, similar_complaint_4, similar_complaint_5')
           .eq('year', prevYear)
           .eq('month', prevMonth)
           .order('rank', { ascending: true });
@@ -197,12 +197,23 @@ const DutyMode = () => {
         complaints = prevComplaints || [];
       }
 
-      const formattedComplaints = complaints.map(complaint => ({
-        type: complaint.complaint_type,
-        count: complaint.count,
-        recentComplaint: `${complaint.count}건의 유사 민원이 있습니다.`,
-        similarComplaints: Array.isArray(complaint.similar_complaints) ? complaint.similar_complaints : []
-      }));
+      const formattedComplaints = complaints.map(complaint => {
+        // 유사 민원들을 배열로 합치기
+        const similarComplaints = [
+          complaint.similar_complaint_1,
+          complaint.similar_complaint_2,
+          complaint.similar_complaint_3,
+          complaint.similar_complaint_4,
+          complaint.similar_complaint_5
+        ].filter(c => c !== null);
+
+        return {
+          type: complaint.complaint_type,
+          count: complaint.count,
+          recentComplaint: `${complaint.count}건의 유사 민원이 있습니다.`,
+          similarComplaints: similarComplaints
+        };
+      });
 
       setTopComplaintTypes(formattedComplaints);
     } catch (error) {
@@ -225,7 +236,7 @@ const DutyMode = () => {
       // 현재 월 또는 전월 데이터에서 해당 유형 찾기
       let { data: monthlyData, error } = await supabase
         .from('monthly_frequent_complaints')
-        .select('similar_complaints')
+        .select('similar_complaint_1, similar_complaint_2, similar_complaint_3, similar_complaint_4, similar_complaint_5')
         .eq('year', currentYear)
         .eq('month', currentMonth)
         .eq('complaint_type', complaintType)
@@ -238,7 +249,7 @@ const DutyMode = () => {
         
         const { data: prevMonthData, error: prevError } = await supabase
           .from('monthly_frequent_complaints')
-          .select('similar_complaints')
+          .select('similar_complaint_1, similar_complaint_2, similar_complaint_3, similar_complaint_4, similar_complaint_5')
           .eq('year', prevYear)
           .eq('month', prevMonth)
           .eq('complaint_type', complaintType)
@@ -250,7 +261,14 @@ const DutyMode = () => {
         monthlyData = prevMonthData;
       }
 
-      const similarData = monthlyData.similar_complaints as any[];
+      // 유사 민원들을 배열로 합치기
+      const similarData = [
+        monthlyData.similar_complaint_1,
+        monthlyData.similar_complaint_2,
+        monthlyData.similar_complaint_3,
+        monthlyData.similar_complaint_4,
+        monthlyData.similar_complaint_5
+      ].filter(c => c !== null);
       
       if (similarData && similarData.length > 0) {
         const similar = similarData.map((complaint: any) => ({

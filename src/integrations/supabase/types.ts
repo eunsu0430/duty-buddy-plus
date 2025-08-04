@@ -199,7 +199,11 @@ export type Database = {
           id: string
           month: number
           rank: number
-          similar_complaints: Json | null
+          similar_complaint_1: Json | null
+          similar_complaint_2: Json | null
+          similar_complaint_3: Json | null
+          similar_complaint_4: Json | null
+          similar_complaint_5: Json | null
           updated_at: string
           year: number
         }
@@ -210,7 +214,11 @@ export type Database = {
           id?: string
           month: number
           rank: number
-          similar_complaints?: Json | null
+          similar_complaint_1?: Json | null
+          similar_complaint_2?: Json | null
+          similar_complaint_3?: Json | null
+          similar_complaint_4?: Json | null
+          similar_complaint_5?: Json | null
           updated_at?: string
           year: number
         }
@@ -221,7 +229,11 @@ export type Database = {
           id?: string
           month?: number
           rank?: number
-          similar_complaints?: Json | null
+          similar_complaint_1?: Json | null
+          similar_complaint_2?: Json | null
+          similar_complaint_3?: Json | null
+          similar_complaint_4?: Json | null
+          similar_complaint_5?: Json | null
           updated_at?: string
           year?: number
         }

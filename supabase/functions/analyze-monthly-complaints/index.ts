@@ -89,17 +89,57 @@ serve(async (req) => {
       console.error('기존 데이터 삭제 오류:', deleteError);
     }
 
+    // civil_complaints_vectors에서 해당 월의 데이터만 가져와서 유형별로 분석
+    const { data: monthlyVectors, error: vectorError } = await supabaseClient
+      .from('civil_complaints_vectors')
+      .select('*')
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString());
+
+    if (vectorError) {
+      console.error('벡터 데이터 조회 오류:', vectorError);
+      throw vectorError;
+    }
+
+    if (!monthlyVectors || monthlyVectors.length === 0) {
+      console.log('해당 월에 벡터 데이터가 없습니다.');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: '해당 월에 분석할 벡터 데이터가 없습니다.' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 벡터 데이터를 유형별로 집계
+    const typeCount: Record<string, any[]> = {};
+    
+    monthlyVectors.forEach(vector => {
+      const type = vector.metadata?.complaint_type || vector.title?.split(' ')[0] || '기타';
+      if (!typeCount[type]) {
+        typeCount[type] = [];
+      }
+      typeCount[type].push(vector);
+    });
+
+    // 상위 5개 유형 선별
+    const sortedTypes = Object.entries(typeCount)
+      .sort(([,a], [,b]) => b.length - a.length)
+      .slice(0, 5);
+
+    console.log(`상위 5개 민원 유형:`, sortedTypes.map(([type, vectors]) => `${type}: ${vectors.length}건`));
+
     // 각 유형별로 유사 민원 찾기 및 저장
     const insertData = [];
     
     for (let i = 0; i < sortedTypes.length; i++) {
-      const [complaintType, typeComplaints] = sortedTypes[i];
+      const [complaintType, typeVectors] = sortedTypes[i];
       
       console.log(`${complaintType} 유형의 유사 민원 분석 중...`);
       
       // 해당 유형의 대표 민원으로 유사 민원 검색
-      const sampleComplaint = typeComplaints[0];
-      const searchQuery = `${complaintType} ${sampleComplaint.registration_info || ''}`.trim();
+      const sampleVector = typeVectors[0];
+      const searchQuery = `${complaintType} ${sampleVector.content || ''}`.trim();
       
       try {
         // 임베딩 생성
@@ -131,40 +171,36 @@ serve(async (req) => {
 
           console.log(`유사 민원 검색 결과: ${similarComplaints?.length || 0}개`);
           
-          if (!searchError && similarComplaints && similarComplaints.length > 0) {
-            insertData.push({
-              year: targetYear,
-              month: targetMonth,
-              complaint_type: complaintType,
-              count: typeComplaints.length,
-              rank: i + 1,
-              similar_complaints: similarComplaints.slice(0, 5).map(sc => ({
-                id: sc.id,
-                title: sc.title,
-                content: sc.content.substring(0, 200),
-                similarity: Math.round(sc.similarity * 100) / 100
-              }))
-            });
-          } else {
-            console.log(`유사 민원 검색 실패 또는 결과 없음: ${searchError?.message || '결과 없음'}`);
-            insertData.push({
-              year: targetYear,
-              month: targetMonth,
-              complaint_type: complaintType,
-              count: typeComplaints.length,
-              rank: i + 1,
-              similar_complaints: []
-            });
+          const insertRow: any = {
+            year: targetYear,
+            month: targetMonth,
+            complaint_type: complaintType,
+            count: typeVectors.length,
+            rank: i + 1
+          };
+
+          // 유사 민원을 각각의 컬럼에 저장
+          if (similarComplaints && similarComplaints.length > 0) {
+            for (let j = 0; j < Math.min(5, similarComplaints.length); j++) {
+              const complaint = similarComplaints[j];
+              insertRow[`similar_complaint_${j + 1}`] = {
+                id: complaint.id,
+                title: complaint.title,
+                content: complaint.content.substring(0, 200),
+                similarity: Math.round(complaint.similarity * 100) / 100
+              };
+            }
           }
+
+          insertData.push(insertRow);
         } else {
           console.log(`임베딩 생성 실패: ${embeddingResponse.status}`);
           insertData.push({
             year: targetYear,
             month: targetMonth,
             complaint_type: complaintType,
-            count: typeComplaints.length,
-            rank: i + 1,
-            similar_complaints: []
+            count: typeVectors.length,
+            rank: i + 1
           });
         }
       } catch (error) {
@@ -174,9 +210,8 @@ serve(async (req) => {
           year: targetYear,
           month: targetMonth,
           complaint_type: complaintType,
-          count: typeComplaints.length,
-          rank: i + 1,
-          similar_complaints: []
+          count: typeVectors.length,
+          rank: i + 1
         });
       }
     }
