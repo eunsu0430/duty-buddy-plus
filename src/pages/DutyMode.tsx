@@ -612,22 +612,26 @@ ${complaintForm.description}
     }
   };
 
-  // 월별 분석 함수 (엣지 함수 호출)
+  // 월별 분석 함수 (엣지 함수 호출) - 전월 데이터 분석
   const handleMonthlyAnalysis = async () => {
     try {
       const currentDate = new Date();
       const currentYear = currentDate.getFullYear();
       const currentMonth = currentDate.getMonth() + 1;
       
+      // 전월 계산
+      const targetMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+      const targetYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+      
       toast({
         title: "분석 시작",
-        description: `${currentYear}년 ${currentMonth}월 월별 민원 분석을 시작합니다...`,
+        description: `${targetYear}년 ${targetMonth}월 월별 민원 분석을 시작합니다...`,
       });
 
       const { data, error } = await supabase.functions.invoke('analyze-monthly-complaints', {
         body: {
-          year: currentYear,
-          month: currentMonth
+          year: targetYear,
+          month: targetMonth
         }
       });
 
