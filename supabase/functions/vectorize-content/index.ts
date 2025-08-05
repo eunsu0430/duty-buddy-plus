@@ -55,7 +55,7 @@ async function extractTextFromPDF(base64Content: string, openaiApiKey: string): 
           messages: [
             {
               role: 'system',
-              content: '당신은 PDF 문서에서 한국어 텍스트를 추출하는 전문가입니다. 주어진 PDF 데이터에서 모든 한국어 텍스트를 정확하게 추출하고, 읽기 쉽게 정리해주세요. 제목, 본문, 목록 등의 구조를 유지하며 완전한 문장으로 반환해주세요.'
+              content: '당신은 PDF 문서에서 한국어 텍스트를 추출하는 전문가입니다. 주어진 PDF 데이터에서 모든 한국어 텍스트를 정확하게 원본 그대로 추출해주세요. 요약하거나 정리하지 말고, 문서에 있는 모든 텍스트를 있는 그대로 추출해서 반환해주세요.'
             },
             {
               role: 'user',
