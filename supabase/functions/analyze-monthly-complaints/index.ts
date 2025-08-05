@@ -33,17 +33,15 @@ serve(async (req) => {
 
     console.log(`${targetYear}년 ${targetMonth}월 민원 데이터 분석 시작`);
 
-    // 해당 월의 벡터 데이터 조회
-    const startDate = new Date(targetYear, targetMonth - 1, 1);
-    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59);
+    // 해당 월의 벡터 데이터 조회 (접수일자 기준)
+    console.log(`${targetYear}년 ${targetMonth}월 접수 민원 데이터 분석 시작`);
 
-    console.log(`분석 기간: ${startDate.toISOString()} ~ ${endDate.toISOString()}`);
-
+    // 접수일자 기준으로 필터링 (metadata에서 접수일자 확인)
     const { data: monthlyVectors, error: vectorError } = await supabaseClient
       .from('civil_complaints_vectors')
       .select('*')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+      .eq('metadata->>year', targetYear.toString())
+      .eq('metadata->>month', targetMonth.toString());
 
     if (vectorError) {
       console.error('벡터 데이터 조회 오류:', vectorError);
