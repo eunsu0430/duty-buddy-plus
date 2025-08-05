@@ -191,54 +191,6 @@ export type Database = {
         }
         Relationships: []
       }
-      monthly_frequent_complaints: {
-        Row: {
-          complaint_type: string
-          count: number
-          created_at: string
-          id: string
-          month: number
-          rank: number
-          similar_complaint_1: Json | null
-          similar_complaint_2: Json | null
-          similar_complaint_3: Json | null
-          similar_complaint_4: Json | null
-          similar_complaint_5: Json | null
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          complaint_type: string
-          count?: number
-          created_at?: string
-          id?: string
-          month: number
-          rank: number
-          similar_complaint_1?: Json | null
-          similar_complaint_2?: Json | null
-          similar_complaint_3?: Json | null
-          similar_complaint_4?: Json | null
-          similar_complaint_5?: Json | null
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          complaint_type?: string
-          count?: number
-          created_at?: string
-          id?: string
-          month?: number
-          rank?: number
-          similar_complaint_1?: Json | null
-          similar_complaint_2?: Json | null
-          similar_complaint_3?: Json | null
-          similar_complaint_4?: Json | null
-          similar_complaint_5?: Json | null
-          updated_at?: string
-          year?: number
-        }
-        Relationships: []
-      }
       training_materials: {
         Row: {
           content: string
