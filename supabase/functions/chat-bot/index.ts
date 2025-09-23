@@ -72,11 +72,31 @@ serve(async (req) => {
       });
     }
 
-    // 4. 교육자료가 없으면 안내 메시지
+    // 4. 교육자료가 없을 때 처리
     if (!similarTraining || similarTraining.length === 0) {
+      // 토글이 ON이고 유사민원이 있을 때
+      if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
+        let civilBasedAnswer = "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n하지만 비슷한 유사민원 처리 방법은 다음과 같습니다:\n\n";
+        
+        similarComplaints.forEach((complaint, index) => {
+          const metadata = complaint.metadata || {};
+          civilBasedAnswer += `${index + 1}. ${complaint.title || '민원사례'}\n`;
+          civilBasedAnswer += `처리방법: ${complaint.content.substring(0, 200)}...\n`;
+          civilBasedAnswer += `처리부서: ${metadata.department || '해당부서'}\n\n`;
+        });
+        
+        return new Response(JSON.stringify({ 
+          reply: civilBasedAnswer,
+          similarComplaints: similarComplaints
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // 토글이 OFF이거나 유사민원도 없을 때
       return new Response(JSON.stringify({ 
         reply: "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요.",
-        similarComplaints: includeComplaintCases ? similarComplaints : []
+        similarComplaints: []
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
