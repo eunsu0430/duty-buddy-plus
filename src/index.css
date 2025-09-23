@@ -17,9 +17,9 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 207 93% 49%;
+    --primary: 207 93% 35%;
     --primary-foreground: 0 0% 98%;
-    --primary-hover: 207 93% 45%;
+    --primary-hover: 207 93% 40%;
 
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -27,29 +27,29 @@ All colors MUST be HSL.
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 207 93% 95%;
-    --accent-foreground: 207 93% 49%;
+    --accent: 207 93% 92%;
+    --accent-foreground: 207 93% 35%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 207 93% 49%;
+    --ring: 207 93% 35%;
 
     --radius: 1rem;
     --radius-lg: 1.5rem;
     --radius-xl: 2rem;
 
     /* 그라디언트 */
-    --gradient-primary: linear-gradient(135deg, hsl(207 93% 49%), hsl(210 93% 55%));
-    --gradient-secondary: linear-gradient(135deg, hsl(210 40% 98%), hsl(207 93% 95%));
+    --gradient-primary: linear-gradient(135deg, hsl(207 93% 35%), hsl(210 93% 40%));
+    --gradient-secondary: linear-gradient(135deg, hsl(210 40% 98%), hsl(207 93% 92%));
     --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 30% 98%));
 
     /* 그림자 */
-    --shadow-soft: 0 4px 6px -1px hsl(207 93% 49% / 0.1), 0 2px 4px -1px hsl(207 93% 49% / 0.06);
-    --shadow-medium: 0 10px 15px -3px hsl(207 93% 49% / 0.1), 0 4px 6px -2px hsl(207 93% 49% / 0.05);
-    --shadow-large: 0 25px 50px -12px hsl(207 93% 49% / 0.15), 0 10px 20px -5px hsl(207 93% 49% / 0.1);
+    --shadow-soft: 0 4px 6px -1px hsl(207 93% 35% / 0.1), 0 2px 4px -1px hsl(207 93% 35% / 0.06);
+    --shadow-medium: 0 10px 15px -3px hsl(207 93% 35% / 0.1), 0 4px 6px -2px hsl(207 93% 35% / 0.05);
+    --shadow-large: 0 25px 50px -12px hsl(207 93% 35% / 0.15), 0 10px 20px -5px hsl(207 93% 35% / 0.1);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -71,9 +71,9 @@ All colors MUST be HSL.
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 207 93% 49%;
+    --primary: 207 93% 35%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --primary-hover: 207 93% 55%;
+    --primary-hover: 207 93% 40%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -89,9 +89,9 @@ All colors MUST be HSL.
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 207 93% 49%;
+    --ring: 207 93% 35%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(207 93% 49%), hsl(210 93% 55%));
+    --gradient-primary: linear-gradient(135deg, hsl(207 93% 35%), hsl(210 93% 40%));
     --gradient-secondary: linear-gradient(135deg, hsl(217.2 32.6% 17.5%), hsl(220 32.6% 20%));
     --gradient-card: linear-gradient(145deg, hsl(222.2 84% 4.9%), hsl(217.2 32.6% 17.5%));
 
