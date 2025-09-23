@@ -327,7 +327,7 @@ const DutyMode = () => {
 담당 부서 연락처를 확인하여 신속한 처리를 도와드리겠습니다.`;
   };
 
-  const generateComplaintText = () => {
+  const generateComplaintText = async () => {
     if (!complaintForm.type || !complaintForm.location || !complaintForm.description) {
       toast({
         title: "입력 오류",
@@ -337,9 +337,53 @@ const DutyMode = () => {
       return;
     }
 
-    const complaintText = `【민원 등록서】
+    setIsLoading(true);
 
-접수일시: ${currentDateTime.toLocaleString('ko-KR')}
+    try {
+      // AI로 민원서식을 정리
+      const { data, error } = await supabase.functions.invoke('format-complaint', {
+        body: {
+          type: complaintForm.type,
+          location: complaintForm.location,
+          reporter: complaintForm.reporter,
+          description: complaintForm.description
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const finalText = `【민원 등록서】
+
+접수일시: ${currentDateTime}
+
+${data.formattedText}
+
+※ 본 민원은 당직근무 지원 시스템을 통해 자동 생성되었습니다.`;
+
+      navigator.clipboard.writeText(finalText).then(() => {
+        toast({
+          title: "AI 정리 완료 ✨",
+          description: "깔끔하게 정리된 민원 등록 문구가 클립보드에 복사되었습니다."
+        });
+      });
+
+      // Reset form
+      setComplaintForm({
+        type: '',
+        location: '',
+        description: '',
+        reporter: ''
+      });
+
+    } catch (error) {
+      console.error('민원서식 생성 오류:', error);
+      
+      // AI 처리 실패시 기본 형식으로 복사
+      const basicText = `【민원 등록서】
+
+접수일시: ${currentDateTime}
 민원유형: ${complaintForm.type}
 발생장소: ${complaintForm.location}
 신고자: ${complaintForm.reporter || '익명'}
@@ -349,20 +393,24 @@ ${complaintForm.description}
 
 ※ 본 민원은 당직근무 지원 시스템을 통해 자동 생성되었습니다.`;
 
-    navigator.clipboard.writeText(complaintText).then(() => {
-      toast({
-        title: "복사 완료",
-        description: "민원 등록 문구가 클립보드에 복사되었습니다."
+      navigator.clipboard.writeText(basicText).then(() => {
+        toast({
+          title: "복사 완료",
+          description: "민원 등록 문구가 클립보드에 복사되었습니다.",
+          variant: "default"
+        });
       });
-    });
 
-    // Reset form
-    setComplaintForm({
-      type: '',
-      location: '',
-      description: '',
-      reporter: ''
-    });
+      // Reset form
+      setComplaintForm({
+        type: '',
+        location: '',
+        description: '',
+        reporter: ''
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
 
@@ -616,10 +664,21 @@ ${complaintForm.description}
                   />
                 </div>
                 <Button 
-                  onClick={generateComplaintText} 
-                  className="w-full h-12 text-lg font-semibold bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                  onClick={generateComplaintText}
+                  disabled={!complaintForm.type || !complaintForm.location || isLoading}
+                  className="w-full rounded-2xl bg-gradient-primary hover:bg-primary-hover text-white py-3 shadow-soft transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  📋 민원 등록 문구 생성
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      AI가 정리 중...
+                    </div>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      ✨ AI로 민원 문구 정리하기
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
