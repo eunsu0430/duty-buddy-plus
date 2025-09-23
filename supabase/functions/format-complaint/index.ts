@@ -34,7 +34,7 @@ serve(async (req) => {
 [신고자]: [제공된 연락처]
 
 [민원 내용]
-[핵심사안을 행정전문용어로 간결하게 한 줄 정리]`;
+[핵심사안을 행정전문용어로 간결하게 정리]`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
