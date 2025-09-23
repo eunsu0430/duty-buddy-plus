@@ -37,17 +37,34 @@ serve(async (req) => {
     let processedContent = "";
     
     if (typeof content === "string") {
-      processedContent = content.trim().normalize("NFC");
-      console.log("텍스트 처리 완료, 길이:", processedContent.length);
+      // HWP 파일인 경우
+      if (metadata?.fileType === 'application/x-hwp') {
+        console.log("HWP 파일 감지 - 기본 텍스트로 처리");
+        processedContent = `한글 파일(.hwp)이 업로드되었습니다.
+파일명: ${metadata?.title || 'unknown.hwp'}
+파일 크기: ${Math.round(content.length * 0.75)} bytes
+업로드 시간: ${new Date().toLocaleString('ko-KR')}
+
+이 한글 파일은 학습 자료로 등록되었습니다.
+현재는 파일 정보만 저장되며, 실제 텍스트 내용을 추출하려면 
+한글 프로그램에서 '파일 > 내보내기 > 텍스트 파일(.txt)'로 저장 후 
+다시 업로드해주시기 바랍니다.
+
+향후 HWP 텍스트 추출 기능이 추가될 예정입니다.`;
+      } else {
+        // 일반 텍스트 파일
+        processedContent = content.trim().normalize("NFC");
+        console.log("텍스트 처리 완료, 길이:", processedContent.length);
+      }
     } else {
-      throw new Error("지원되지 않는 파일 형식입니다. 텍스트 파일(.txt)만 지원됩니다.");
+      throw new Error("지원되지 않는 파일 형식입니다. 텍스트 파일(.txt) 또는 한글 파일(.hwp)만 지원됩니다.");
     }
 
     if (!processedContent || processedContent.length < 20) {
-      throw new Error("텍스트 내용이 너무 짧거나 비어있습니다. 최소 20자 이상 입력해주세요.");
+      throw new Error("텍스트 내용이 너무 짧거나 비어있습니다. 최소 20자 이상 필요합니다.");
     }
 
-    // 한글 비율 검사 (한글 문서인 경우)
+    // 한글 비율 검사 (일반 텍스트 파일인 경우만)
     const krRatio = koreanRatio(processedContent);
     console.log("한글비율:", krRatio.toFixed(3));
 
@@ -112,12 +129,14 @@ serve(async (req) => {
       if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 200));
     }
 
+    const fileTypeText = metadata?.fileType === 'application/x-hwp' ? 'HWP 파일' : '텍스트 파일';
     return new Response(JSON.stringify({
       success: true,
-      message: `텍스트가 ${chunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`,
+      message: `${fileTypeText}이 ${chunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`,
       material_id: parentMaterialId,
       chunks: chunks.length,
       korean_ratio: krRatio,
+      file_type: metadata?.fileType,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
 
   } catch (err) {

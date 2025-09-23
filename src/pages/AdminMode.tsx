@@ -184,11 +184,14 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
   const file = event.target.files?.[0];
   if (!file) return;
 
-  // 텍스트 파일만 허용
-  if (!file.type.startsWith('text/') && !file.name.toLowerCase().endsWith('.txt')) {
+  // 지원되는 파일 형식 검사
+  const isTextFile = file.type.startsWith('text/') || file.name.toLowerCase().endsWith('.txt');
+  const isHwpFile = file.name.toLowerCase().endsWith('.hwp');
+  
+  if (!isTextFile && !isHwpFile) {
     toast({
       title: "파일 형식 오류",
-      description: "텍스트 파일(.txt)만 업로드 가능합니다.",
+      description: "텍스트 파일(.txt) 또는 한글 파일(.hwp)만 업로드 가능합니다.",
       variant: "destructive",
     });
     return;
@@ -199,16 +202,29 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
   try {
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const content = e.target?.result as string;
+      let content: string;
+      let fileType: string;
 
-      if (!content || content.trim().length < 20) {
-        toast({
-          title: "파일 내용 오류",
-          description: "파일 내용이 너무 짧거나 비어있습니다.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
+      if (isHwpFile) {
+        // HWP 파일의 경우 base64로 인코딩
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const bytes = new Uint8Array(arrayBuffer);
+        content = btoa(String.fromCharCode(...bytes));
+        fileType = 'application/x-hwp';
+      } else {
+        // 텍스트 파일의 경우
+        content = e.target?.result as string;
+        fileType = file.type || 'text/plain';
+
+        if (!content || content.trim().length < 20) {
+          toast({
+            title: "파일 내용 오류",
+            description: "파일 내용이 너무 짧거나 비어있습니다.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
       }
 
       const { error } = await supabase.functions.invoke('vectorize-content', {
@@ -216,7 +232,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
           content: content,
           metadata: {
             title: file.name,
-            fileType: file.type,
+            fileType: fileType,
             uploadedAt: new Date().toISOString()
           }
         }
@@ -239,8 +255,12 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
       setIsLoading(false);
     };
 
-    // 텍스트 파일로 읽기
-    reader.readAsText(file, 'UTF-8');
+    // 파일 읽기
+    if (isHwpFile) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file, 'UTF-8');
+    }
   } catch (error) {
     console.error('File reading error:', error);
     toast({
@@ -1022,17 +1042,17 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
                 <CardHeader>
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
-                    텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
-                    한글 문서의 경우 텍스트 파일로 저장 후 업로드해주세요.
+                    텍스트 파일(.txt) 또는 한글 파일(.hwp)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    HWP 파일의 경우 현재 파일 정보만 저장되며, 실제 텍스트 추출을 위해서는 텍스트 파일로 변환 후 재업로드가 필요합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="training-file">교육자료 파일 (텍스트만)</Label>
+                    <Label htmlFor="training-file">교육자료 파일 (.txt, .hwp)</Label>
                     <Input 
                       id="training-file" 
                       type="file" 
-                      accept=".txt,text/plain"
+                      accept=".txt,.hwp,text/plain"
                       onChange={handleTrainingUpload}
                     />
                   </div>
