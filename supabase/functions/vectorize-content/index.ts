@@ -102,7 +102,7 @@ serve(async (req) => {
           "Authorization": `Bearer ${openaiApiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model: "text-embedding-3-small", input: chunk }),
+        body: JSON.stringify({ model: "text-embedding-ada-002", input: chunk }),
       });
 
       if (!embRes.ok) {

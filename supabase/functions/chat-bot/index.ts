@@ -31,10 +31,10 @@ serve(async (req) => {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'text-embedding-ada-002',
-        input: message
-      }),
+        body: JSON.stringify({
+          model: 'text-embedding-ada-002',
+          input: message
+        }),
     });
 
     if (!embeddingResponse.ok) {
