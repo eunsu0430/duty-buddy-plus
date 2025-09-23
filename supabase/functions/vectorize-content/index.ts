@@ -1,39 +1,37 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@3.4.120";
+import { extractText } from 'https://esm.sh/unpdf@0.11.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF 텍스트 추출 (로컬 처리)
+// PDF 텍스트 추출 (unpdf 사용)
 async function extractPDFTextLocally(base64Content: string): Promise<string> {
   try {
-    console.log('PDF 로컬 텍스트 추출 시작');
-    const pdfData = Uint8Array.from(atob(base64Content), c => c.charCodeAt(0));
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-    const pdf = await loadingTask.promise;
+    console.log('PDF 로컬 텍스트 추출 시작 (unpdf 사용)');
     
-    let textContent = '';
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const text = await page.getTextContent();
-      const pageText = text.items.map((item: any) => item.str).join(' ');
-      textContent += `\n=== Page ${pageNum} ===\n${pageText}`;
+    // base64를 Uint8Array로 변환
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
     
-    const result = textContent.trim();
-    console.log(`PDF 텍스트 추출 완료: ${result.length}자`);
+    // unpdf로 텍스트 추출
+    const result = await extractText(bytes);
+    
+    console.log(`PDF 텍스트 추출 완료: ${result.text.length}자`);
     
     // 텍스트가 너무 적으면 스캔본 PDF일 가능성이 높음
-    if (result.length < 100) {
+    if (result.text.length < 100) {
       console.log('추출된 텍스트가 부족, 스캔본 PDF로 추정');
       throw new Error('텍스트 기반 PDF가 아닙니다. 스캔본 처리 필요');
     }
     
-    return result;
+    return result.text;
   } catch (error) {
     console.error('PDF 로컬 추출 실패:', error);
     throw new Error('PDF 텍스트 추출에 실패했습니다.');
@@ -65,7 +63,7 @@ serve(async (req) => {
 
     // PDF 파일이면 로컬 추출
     if (typeof content === 'string' && metadata?.fileType === 'application/pdf') {
-      console.log('PDF 파일 감지 - 로컬 텍스트 추출 시작');
+      console.log('PDF 파일 감지 - unpdf로 텍스트 추출 시작');
       processedContent = await extractPDFTextLocally(content);
     } else if (typeof content === 'string') {
       console.log('일반 텍스트 처리');
