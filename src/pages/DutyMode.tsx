@@ -85,7 +85,7 @@ const DutyMode = () => {
   const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
-  const [includeComplaintCases, setIncludeComplaintCases] = useState(false);
+  const [includeComplaintCases, setIncludeComplaintCases] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
