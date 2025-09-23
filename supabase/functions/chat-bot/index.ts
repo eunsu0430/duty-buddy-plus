@@ -49,9 +49,13 @@ serve(async (req) => {
     // 2. 교육자료에서 검색 (항상 수행)
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.7,
-      match_count: 3
+      match_threshold: 0.5,  // threshold를 낮춤
+      match_count: 5
     });
+
+    if (trainingError) {
+      console.error('교육자료 검색 오류:', trainingError);
+    }
 
     console.log('교육자료 검색 결과:', { 
       training: similarTraining?.length || 0 
@@ -76,21 +80,58 @@ serve(async (req) => {
     if (!similarTraining || similarTraining.length === 0) {
       // 토글이 ON이고 유사민원이 있을 때
       if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
-        let civilBasedAnswer = "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n하지만 비슷한 유사민원 처리 방법은 다음과 같습니다:\n\n";
-        
-        similarComplaints.forEach((complaint, index) => {
+        // AI가 유사민원 조치내용을 정리해서 설명하도록 요청
+        const civilContext = similarComplaints.map((complaint, index) => {
           const metadata = complaint.metadata || {};
-          civilBasedAnswer += `${index + 1}. ${complaint.title || '민원사례'}\n`;
-          civilBasedAnswer += `처리방법: ${complaint.content.substring(0, 200)}...\n`;
-          civilBasedAnswer += `처리부서: ${metadata.department || '해당부서'}\n\n`;
-        });
+          return `민원사례 ${index + 1}: ${complaint.content} (처리부서: ${metadata.department || '해당부서'})`;
+        }).join('\n\n');
+
+        const systemPromptForCivil = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 
         
-        return new Response(JSON.stringify({ 
-          reply: civilBasedAnswer,
-          similarComplaints: similarComplaints
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+교육자료에는 관련 매뉴얼이 없지만, 다음의 유사한 민원사례들을 바탕으로 처리방법을 정리해서 설명해주세요:
+
+${civilContext}
+
+다음 형식으로 답변해주세요:
+
+죄송합니다. 관련된 민원 매뉴얼이 없습니다.
+
+하지만 비슷한 유사민원 처리 방법은 다음과 같습니다:
+[유사민원들의 조치내용을 종합하여 AI가 정리한 처리방법을 단계별로 설명]
+
+답변 시 주의사항:
+- 제공된 유사민원 사례들의 조치내용을 종합하여 일반적인 처리방법으로 정리하세요
+- 단순히 원문을 복사하지 말고, AI가 이해하고 정리한 내용으로 설명하세요
+- 구체적이고 실용적인 처리절차를 제시하세요`;
+
+        const civilResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPromptForCivil },
+              { role: 'user', content: `질문: ${message}` }
+            ],
+            temperature: 0.3,
+            max_tokens: 600,
+          }),
         });
+
+        if (civilResponse.ok) {
+          const civilData = await civilResponse.json();
+          const civilReply = civilData.choices[0].message.content;
+          
+          return new Response(JSON.stringify({ 
+            reply: civilReply,
+            similarComplaints: similarComplaints
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
       
       // 토글이 OFF이거나 유사민원도 없을 때
