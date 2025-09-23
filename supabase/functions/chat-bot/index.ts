@@ -49,13 +49,13 @@ serve(async (req) => {
       firstFewValues: queryVector.slice(0, 5)
     });
 
-    // 2. 교육자료에서 검색 (항상 수행) - 더 낮은 임계값 사용
+    // 2. 교육자료에서 검색 (항상 수행) - 엄격한 임계값 사용
     console.log('교육자료 검색 시작');
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.1,  // 임계값을 매우 낮게 설정
-      match_count: 10
+      match_threshold: 0.8,  // 임계값을 높게 설정하여 정확한 매칭만 허용
+      match_count: 5
     });
 
     if (trainingError) {
@@ -214,7 +214,8 @@ ${civilContext}
 사용자의 질문에 대해 다음과 같은 형식으로 답변해주세요:
 
 **처리방법:**
-- 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
+- 제공된 교육자료에 명시된 내용만을 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
+- 교육자료에 없는 내용은 절대 추측하거나 일반적인 지식으로 답변하지 마세요
 
 ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
 `**참고 사례:**
@@ -222,7 +223,8 @@ ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ?
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
-- 교육자료에 기반해서만 처리방법을 설명하세요
+- 교육자료에 명시된 내용만을 바탕으로 답변하세요. 추측이나 일반적인 지식은 사용하지 마세요
+- 교육자료에 부분적으로만 관련된 내용이 있다면, "확인이 필요합니다"라고 표현하세요
 ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요' : ''}
 - 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
