@@ -429,8 +429,11 @@ ${complaintForm.description}
               <ArrowLeft className="w-4 h-4" />
               홈으로
             </Button>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              🏢 당직근무 지원 시스템 - 당직자 모드
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <span>🏢</span>
+              <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                당직근무 지원 시스템 - 당직자 모드
+              </span>
             </h1>
           </div>
           <div className="flex items-center gap-6 text-sm">

@@ -19,16 +19,20 @@ All colors MUST be HSL.
 
     --primary: 207 93% 35%;
     --primary-foreground: 0 0% 98%;
-    --primary-hover: 207 93% 40%;
+    --primary-hover: 207 93% 45%;
+    --primary-light: 207 93% 55%;
+    --primary-dark: 207 93% 25%;
 
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 40% 94%;
     --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-hover: 210 40% 88%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 207 93% 92%;
-    --accent-foreground: 207 93% 35%;
+    --accent: 45 93% 47%;
+    --accent-foreground: 0 0% 98%;
+    --accent-light: 45 93% 65%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
