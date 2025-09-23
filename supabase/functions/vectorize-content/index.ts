@@ -1,8 +1,8 @@
 // --- 필요한 모듈 임포트 ---
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { createClient } from "https://eextractPDFTextLocallysm.sh/@supabase/supabase-js@2.7.1";
+// pdf.js (esm.sh 경유 - 러버블 호환)
 import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.269/es5/build/pdf.js";
-import Tesseract from "https://esm.sh/tesseract.js@5.1.0";
 
 // --- CORS 헤더 ---
 const corsHeaders = {
@@ -10,37 +10,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// --- PDF 텍스트 추출 함수 (pdf.js + OCR fallback) ---
-async function extractPDFTextLocally(base64Content: string): Promise<{ text: string; pages: number }> {
+// PDF 텍스트 추출 함수
+export async function extractPDFTextLocally(base64Content: string): Promise<{ text: string; pages: number }> {
   console.log("PDF 텍스트 추출 시작...");
 
+  // base64 → Uint8Array 변환
   const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
   const pdfData = Uint8Array.from(atob(cleanBase64), (c) => c.charCodeAt(0));
 
-  try {
-    // 1) pdf.js 로딩
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-    const pdf = await loadingTask.promise;
+  // PDF 로딩
+  const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+  const pdf = await loadingTask.promise;
 
-    let fullText = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(" ");
-      fullText += `\n\n[Page ${i}]\n${pageText}`;
-    }
-
-    console.log("PDF 텍스트 추출 완료:", pdf.numPages, "pages");
-    return { text: fullText.trim(), pages: pdf.numPages };
-
-  } catch (err) {
-    console.error("pdf.js 텍스트 추출 실패, OCR fallback 시도:", err.message);
-
-    // 2) OCR fallback (첫 페이지만 예시, 필요시 반복 가능)
-    const { data: { text } } = await Tesseract.recognize(pdfData, "kor+eng");
-    console.log("OCR 추출 완료");
-    return { text: text.trim(), pages: 1 };
+  let fullText = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map((item: any) => item.str).join(" ");
+    fullText += `\n\n[Page ${i}]\n${pageText}`;
   }
+
+  console.log("PDF 텍스트 추출 완료, 페이지 수:", pdf.numPages);
+  return { text: fullText.trim(), pages: pdf.numPages };
 }
 
 // --- 한글 비율 검사 ---
