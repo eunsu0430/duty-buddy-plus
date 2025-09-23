@@ -8,140 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// HWP 파일에서 텍스트 추출하는 함수
-function extractTextFromHWP(base64Content: string): string {
-  try {
-    console.log("HWP 텍스트 추출 시작...");
-    
-    // base64를 바이너리로 변환
-    const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
-    const binaryString = atob(cleanBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    console.log("HWP 파일 크기:", bytes.length);
-    
-    // HWP 파일은 복합문서 구조이므로 직접 텍스트만 추출
-    let extractedText = "";
-    let foundKoreanText = false;
-    
-    // 한글 텍스트 패턴 검색 (UTF-16LE, EUC-KR 등)
-    const textChunks: string[] = [];
-    
-    // 방법 1: 연속된 한글/영문 문자열 추출
-    let tempText = "";
-    for (let i = 0; i < bytes.length - 1; i++) {
-      const byte1 = bytes[i];
-      const byte2 = bytes[i + 1];
-      
-      // UTF-16LE 한글 범위 체크
-      if (byte2 >= 0xAC && byte2 <= 0xD7 && byte1 >= 0x00 && byte1 <= 0xFF) {
-        try {
-          const char = String.fromCharCode((byte2 << 8) | byte1);
-          if (char.match(/[가-힣]/)) {
-            tempText += char;
-            foundKoreanText = true;
-            i++; // 2바이트 문자이므로 건너뛰기
-            continue;
-          }
-        } catch (e) {}
-      }
-      
-      // ASCII 영문/숫자/기본 특수문자
-      if (byte1 >= 32 && byte1 <= 126) {
-        tempText += String.fromCharCode(byte1);
-      }
-      // 줄바꿈 및 공백
-      else if (byte1 === 10 || byte1 === 13 || byte1 === 32) {
-        if (tempText.trim().length > 2) {
-          textChunks.push(tempText.trim());
-          tempText = "";
-        }
-        tempText += String.fromCharCode(byte1);
-      }
-      // 텍스트 구분자로 간주
-      else if (tempText.trim().length > 2) {
-        textChunks.push(tempText.trim());
-        tempText = "";
-      }
-    }
-    
-    if (tempText.trim().length > 2) {
-      textChunks.push(tempText.trim());
-    }
-    
-    // 방법 2: EUC-KR 방식으로도 시도
-    if (!foundKoreanText) {
-      console.log("UTF-16 방식 실패, EUC-KR 시도...");
-      for (let i = 0; i < bytes.length - 1; i++) {
-        const byte1 = bytes[i];
-        const byte2 = bytes[i + 1];
-        
-        // EUC-KR 한글 완성형 범위
-        if (byte1 >= 0xB0 && byte1 <= 0xC8 && byte2 >= 0xA1 && byte2 <= 0xFE) {
-          try {
-            // EUC-KR을 UTF-8로 변환 시도
-            const eucBytes = new Uint8Array([byte1, byte2]);
-            const decoder = new TextDecoder('euc-kr', { fatal: false });
-            const char = decoder.decode(eucBytes);
-            if (char && char.match(/[가-힣]/)) {
-              tempText += char;
-              foundKoreanText = true;
-              i++; // 2바이트 건너뛰기
-              continue;
-            }
-          } catch (e) {}
-        }
-        
-        // ASCII 처리
-        if (byte1 >= 32 && byte1 <= 126) {
-          tempText += String.fromCharCode(byte1);
-        } else if ((byte1 === 10 || byte1 === 13) && tempText.trim().length > 2) {
-          textChunks.push(tempText.trim());
-          tempText = "";
-        }
-      }
-      
-      if (tempText.trim().length > 2) {
-        textChunks.push(tempText.trim()); 
-      }
-    }
-    
-    // 추출된 텍스트 정리
-    if (textChunks.length > 0) {
-      // 의미있는 텍스트만 필터링
-      const meaningfulChunks = textChunks
-        .filter(chunk => {
-          const cleanChunk = chunk.replace(/[^\w가-힣\s]/g, '').trim();
-          return cleanChunk.length >= 2 && 
-                 !cleanChunk.match(/^[0-9\s]+$/) && // 숫자만 있는 것 제외
-                 !cleanChunk.match(/^[!@#$%^&*()_+={}\[\]|\\:";'<>?.,\/\s]+$/); // 특수문자만 있는 것 제외
-        })
-        .slice(0, 100); // 최대 100개 청크까지만
-      
-      if (meaningfulChunks.length > 0) {
-        extractedText = meaningfulChunks.join('\n').trim();
-        console.log("HWP 텍스트 추출 성공, 청크 수:", meaningfulChunks.length);
-        console.log("추출된 텍스트 샘플:", extractedText.substring(0, 200));
-        
-        // 최소 길이 체크
-        if (extractedText.length >= 20) {
-          return extractedText;
-        }
-      }
-    }
-    
-    console.log("HWP 텍스트 추출 실패 - 의미있는 텍스트 없음");
-    return null;
-    
-  } catch (error) {
-    console.error("HWP 텍스트 추출 오류:", error);
-    return null;
-  }
-}
-
 // --- 한글 비율 검사 ---
 function koreanRatio(text: string) {
   const total = Math.max(1, text.length);
@@ -167,50 +33,16 @@ serve(async (req) => {
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiApiKey) throw new Error("OPENAI_API_KEY가 설정되어 있지 않습니다.");
 
-    // 텍스트 콘텐츠 처리
+    // UTF-8 텍스트 파일 처리
     let processedContent = "";
     
     if (typeof content === "string") {
-      // HWP 파일인 경우
-      if (metadata?.fileType === 'application/x-hwp') {
-        console.log("HWP 파일 감지 - 텍스트 추출 시도");
-        
-        const extractedText = extractTextFromHWP(content);
-        
-        if (extractedText && extractedText.length > 20) {
-          // 텍스트 추출 성공
-          processedContent = extractedText;
-          console.log("HWP 텍스트 추출 성공!");
-          console.log("추출된 텍스트 길이:", processedContent.length);
-          console.log("추출된 텍스트 샘플 (처음 300자):", processedContent.substring(0, 300));
-          console.log("한글 포함 여부:", /[가-힣]/.test(processedContent));
-        } else {
-          // 텍스트 추출 실패 - 기본 메시지 사용
-          console.log("HWP 텍스트 추출 실패 - 기본 메시지 사용");
-          console.log("추출 시도 결과 길이:", extractedText?.length || 0);
-          processedContent = `한글 파일(.hwp) 업로드 완료
-파일명: ${metadata?.title || 'unknown.hwp'}
-파일 크기: ${Math.round(content.length * 0.75)} bytes
-업로드 시간: ${new Date().toLocaleString('ko-KR')}
-
-이 한글 파일은 학습 자료로 등록되었습니다.
-현재 HWP 파일에서 텍스트 자동 추출을 시도했지만 실패했습니다.
-
-더 정확한 텍스트 추출을 위해서는 다음 방법을 권장합니다:
-1. 한글 프로그램에서 해당 파일을 열기
-2. '파일 > 내보내기 > 텍스트 파일(.txt)'로 저장
-3. 저장된 텍스트 파일을 다시 업로드
-
-※ HWP 파일의 복잡한 구조나 이미지/표 위주의 내용으로 인해 
-   자동 텍스트 추출이 어려울 수 있습니다.`;
-        }
-      } else {
-        // 일반 텍스트 파일
-        processedContent = content.trim().normalize("NFC");
-        console.log("텍스트 처리 완료, 길이:", processedContent.length);
-      }
+      // UTF-8 텍스트 파일 처리
+      processedContent = content.trim().normalize("NFC");
+      console.log("텍스트 처리 완료, 길이:", processedContent.length);
+      console.log("텍스트 샘플 (처음 200자):", processedContent.substring(0, 200));
     } else {
-      throw new Error("지원되지 않는 파일 형식입니다. 텍스트 파일(.txt) 또는 한글 파일(.hwp)만 지원됩니다.");
+      throw new Error("지원되지 않는 파일 형식입니다. UTF-8 텍스트 파일(.txt)만 지원됩니다.");
     }
 
     if (!processedContent || processedContent.length < 20) {
@@ -297,19 +129,13 @@ serve(async (req) => {
       if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 200));
     }
 
-    const fileTypeText = metadata?.fileType === 'application/x-hwp' ? 'HWP 파일' : '텍스트 파일';
-    const successMessage = metadata?.fileType === 'application/x-hwp' 
-      ? `HWP 파일에서 텍스트를 추출하여 ${chunks.length}개 청크로 벡터화했습니다.`
-      : `텍스트 파일이 ${chunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`;
-    
     return new Response(JSON.stringify({
       success: true,
-      message: successMessage,
+      message: `텍스트 파일이 ${chunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`,
       material_id: parentMaterialId,
       chunks: chunks.length,
       korean_ratio: krRatio,
-      file_type: metadata?.fileType,
-      text_extracted: metadata?.fileType === 'application/x-hwp' && processedContent.length > 300,
+      file_type: metadata?.fileType || 'text/plain',
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
 
   } catch (err) {
