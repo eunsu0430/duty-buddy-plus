@@ -216,10 +216,9 @@ ${civilContext}
 **처리방법:**
 - 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
 
-${includeComplaintCases ? `**참고 사례:**
-${similarComplaints && similarComplaints.length > 0 ? 
-  `총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다. 상세 내용은 아래 버튼을 클릭하여 확인하실 수 있습니다.` : 
-  '유사한 민원사례가 없습니다.'}` : ''}
+${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
+`**참고 사례:**
+총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다. 상세 내용은 아래 버튼을 클릭하여 확인하실 수 있습니다.` : ''}
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
