@@ -1043,7 +1043,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
                     텍스트 파일(.txt) 또는 한글 파일(.hwp)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
-                    HWP 파일의 경우 현재 파일 정보만 저장되며, 실제 텍스트 추출을 위해서는 텍스트 파일로 변환 후 재업로드가 필요합니다.
+                    HWP 파일의 경우 자동으로 텍스트를 추출하여 처리하며, 복잡한 포맷의 경우 텍스트 파일로 변환 후 재업로드를 권장합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
