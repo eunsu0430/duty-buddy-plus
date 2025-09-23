@@ -178,72 +178,83 @@ const AdminMode = () => {
     }
   };
 
-  // Training material upload handler
-  const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+// ArrayBuffer → Base64 안전 변환 함수
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000; // 32KB 단위로 처리 (성능 + 메모리 안정성)
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk as any);
+  }
+  return btoa(binary);
+}
 
-    setIsLoading(true);
-    
-     try {
-      const reader = new FileReader();
-       reader.onload = async (e) => {
-         let content: string;
-         
-         // PDF 파일인 경우 ArrayBuffer를 base64로 변환
-         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-           const arrayBuffer = e.target?.result as ArrayBuffer;
-           const uint8Array = new Uint8Array(arrayBuffer);
-           const binaryString = uint8Array.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
-           content = btoa(binaryString);
-         } else {
-           content = e.target?.result as string;
-         }
-        
-        const { error } = await supabase.functions.invoke('vectorize-content', {
-          body: {
-            content: content,
-            metadata: {
-              title: file.name,
-              fileType: file.type,
-              uploadedAt: new Date().toISOString()
-            }
-          }
-        });
+// Training material upload handler
+const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-        if (error) {
-          console.error('Training upload error:', error);
-          toast({
-            title: "오류",
-            description: "교육자료 업로드에 실패했습니다.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "성공",
-            description: "교육자료가 성공적으로 업로드되고 벡터화되었습니다.",
-          });
-          fetchTrainingMaterials();
-        }
-        setIsLoading(false);
-      };
-      
-      // PDF 파일은 ArrayBuffer로, 텍스트 파일은 텍스트로 읽기
+  setIsLoading(true);
+
+  try {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      let content: string;
+
+      // PDF 파일인 경우 → 안전하게 base64 변환
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        reader.readAsArrayBuffer(file);
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        content = arrayBufferToBase64(arrayBuffer);   // ✅ 여기만 바뀜
       } else {
-        reader.readAsText(file);
+        content = e.target?.result as string;
       }
-    } catch (error) {
-      console.error('File reading error:', error);
-      toast({
-        title: "오류",
-        description: "파일 읽기에 실패했습니다.",
-        variant: "destructive",
+
+      const { error } = await supabase.functions.invoke('vectorize-content', {
+        body: {
+          content: content,
+          metadata: {
+            title: file.name,
+            fileType: file.type,
+            uploadedAt: new Date().toISOString()
+          }
+        }
       });
+
+      if (error) {
+        console.error('Training upload error:', error);
+        toast({
+          title: "오류",
+          description: "교육자료 업로드에 실패했습니다.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "성공",
+          description: "교육자료가 성공적으로 업로드되고 벡터화되었습니다.",
+        });
+        fetchTrainingMaterials();
+      }
       setIsLoading(false);
+    };
+
+    // PDF → ArrayBuffer, TXT → Text 로 읽기
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
     }
-  };
+  } catch (error) {
+    console.error('File reading error:', error);
+    toast({
+      title: "오류",
+      description: "파일 읽기에 실패했습니다.",
+      variant: "destructive",
+    });
+    setIsLoading(false);
+  }
+};
+
 
   // Civil complaints upload handler (Excel processing)
   const handleCivilComplaintsUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
