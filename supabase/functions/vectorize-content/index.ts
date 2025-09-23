@@ -188,7 +188,7 @@ serve(async (req) => {
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -286,14 +286,17 @@ serve(async (req) => {
 
       if (materialsResult.error) {
         console.error('training_materials 저장 오류:', materialsResult.error);
-        throw materialsResult.error;
+        console.error('오류 세부사항:', JSON.stringify(materialsResult.error, null, 2));
+        throw new Error(`training_materials 저장 실패: ${materialsResult.error.message}`);
       }
       
       if (vectorsResult.error) {
         console.error('training_vectors 저장 오류:', vectorsResult.error);
-        throw vectorsResult.error;
+        console.error('오류 세부사항:', JSON.stringify(vectorsResult.error, null, 2));
+        throw new Error(`training_vectors 저장 실패: ${vectorsResult.error.message}`);
       }
 
+      console.log(`청크 ${i + 1} 저장 성공 - materials ID:`, materialsResult.data?.[0]?.id, 'vectors ID:', vectorsResult.data?.[0]?.id);
       results.push({ materialsResult, vectorsResult });
       
       // API 제한 방지를 위한 대기
