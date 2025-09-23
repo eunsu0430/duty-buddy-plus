@@ -266,63 +266,134 @@ serve(async (req) => {
       throw new Error('처리할 수 있는 텍스트 내용이 충분하지 않습니다. (최소 20자 이상 필요)');
     }
 
-    // Generate embeddings using OpenAI
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-ada-002',
-        input: processedContent
-      }),
-    });
-
-    if (!embeddingResponse.ok) {
-      throw new Error(`OpenAI API 오류: ${embeddingResponse.statusText}`);
-    }
-
-    const embeddingData = await embeddingResponse.json();
-    const vector = embeddingData.data[0].embedding;
-
-    // Store in both training_materials and training_vectors tables
-    const [materialsResult, vectorsResult] = await Promise.all([
-      // Store in training_materials table
-      supabaseClient
-        .from('training_materials')
-        .insert([{
-          title: metadata?.title || 'Training Material',
-          content: processedContent,
-          file_url: null,
-        }]),
+    // 텍스트를 1000토큰(약 3000-4000자) 단위로 분할
+    function splitTextIntoChunks(text: string, maxChunkSize: number = 3500): string[] {
+      const chunks: string[] = [];
+      const sentences = text.split(/[.!?]\s+/);
       
-      // Store in training_vectors table for similarity search
-      supabaseClient
-        .from('training_vectors')
-        .insert([{
-          title: metadata?.title || 'Training Material',
-          content: processedContent,
-          vector: vector,
-          metadata: metadata || {}
-        }])
-    ]);
-
-    if (materialsResult.error) {
-      console.error('Error storing in training_materials:', materialsResult.error);
-      throw materialsResult.error;
+      let currentChunk = '';
+      
+      for (const sentence of sentences) {
+        const potentialChunk = currentChunk + (currentChunk ? '. ' : '') + sentence;
+        
+        if (potentialChunk.length <= maxChunkSize) {
+          currentChunk = potentialChunk;
+        } else {
+          if (currentChunk) {
+            chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+          } else {
+            // 문장이 너무 긴 경우 강제로 나누기
+            const words = sentence.split(' ');
+            let wordChunk = '';
+            
+            for (const word of words) {
+              if ((wordChunk + ' ' + word).length <= maxChunkSize) {
+                wordChunk += (wordChunk ? ' ' : '') + word;
+              } else {
+                if (wordChunk) chunks.push(wordChunk.trim());
+                wordChunk = word;
+              }
+            }
+            if (wordChunk) currentChunk = wordChunk;
+          }
+        }
+      }
+      
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      return chunks.filter(chunk => chunk.length > 20);
     }
+
+    const textChunks = splitTextIntoChunks(processedContent);
+    console.log(`텍스트를 ${textChunks.length}개 청크로 분할`);
+
+    // 각 청크별로 임베딩 생성 및 저장
+    const allResults = [];
     
-    if (vectorsResult.error) {
-      console.error('Error storing in training_vectors:', vectorsResult.error);
-      throw vectorsResult.error;
+    for (let i = 0; i < textChunks.length; i++) {
+      const chunk = textChunks[i];
+      console.log(`청크 ${i + 1}/${textChunks.length} 처리 중 (길이: ${chunk.length}자)`);
+
+      // Generate embeddings using OpenAI text-embedding-3-small
+      const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-small',
+          input: chunk
+        }),
+      });
+
+      if (!embeddingResponse.ok) {
+        const errorText = await embeddingResponse.text();
+        throw new Error(`OpenAI API 오류 (청크 ${i + 1}): ${embeddingResponse.status} - ${errorText}`);
+      }
+
+      const embeddingData = await embeddingResponse.json();
+      const vector = embeddingData.data[0].embedding;
+
+      // 청크별 메타데이터 생성
+      const chunkMetadata = {
+        ...metadata,
+        chunk_index: i + 1,
+        total_chunks: textChunks.length,
+        chunk_size: chunk.length,
+        original_title: metadata?.title || 'Training Material'
+      };
+
+      // Store in both training_materials and training_vectors tables
+      const [materialsResult, vectorsResult] = await Promise.all([
+        // Store in training_materials table
+        supabaseClient
+          .from('training_materials')
+          .insert([{
+            title: `${metadata?.title || 'Training Material'} (${i + 1}/${textChunks.length})`,
+            content: chunk,
+            file_url: null,
+          }]),
+        
+        // Store in training_vectors table for similarity search
+        supabaseClient
+          .from('training_vectors')
+          .insert([{
+            title: `${metadata?.title || 'Training Material'} (${i + 1}/${textChunks.length})`,
+            content: chunk,
+            vector: vector,
+            metadata: chunkMetadata
+          }])
+      ]);
+
+      if (materialsResult.error) {
+        console.error(`Error storing chunk ${i + 1} in training_materials:`, materialsResult.error);
+        throw materialsResult.error;
+      }
+      
+      if (vectorsResult.error) {
+        console.error(`Error storing chunk ${i + 1} in training_vectors:`, vectorsResult.error);
+        throw vectorsResult.error;
+      }
+
+      allResults.push({ materialsResult, vectorsResult });
+      
+      // API 호출 간 짧은 대기 (Rate limiting 방지)
+      if (i < textChunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
 
-    console.log('Training material vectorized and stored successfully');
+    console.log(`학습 자료가 ${textChunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다`);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: '학습 자료가 성공적으로 벡터화되어 저장되었습니다.' 
+      message: `학습 자료가 ${textChunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`,
+      chunks_processed: textChunks.length,
+      total_vectors: allResults.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
