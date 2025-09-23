@@ -186,6 +186,10 @@ serve(async (req) => {
   try {
     const { content, metadata } = await req.json();
     
+    console.log('=== 함수 실행 시작 ===');
+    console.log('요청 메타데이터:', metadata);
+    console.log('콘텐츠 길이:', typeof content === 'string' ? content.length : 'Not string');
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -193,11 +197,31 @@ serve(async (req) => {
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     
+    console.log('환경변수 확인:');
+    console.log('- SUPABASE_URL:', Deno.env.get('SUPABASE_URL') ? '설정됨' : '없음');
+    console.log('- SUPABASE_SERVICE_ROLE_KEY:', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? '설정됨' : '없음');
+    console.log('- OPENAI_API_KEY:', openaiApiKey ? '설정됨' : '없음');
+    
     if (!openaiApiKey) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
 
     console.log('콘텐츠 처리 시작:', metadata?.title);
+
+    // 데이터베이스 연결 테스트
+    try {
+      console.log('=== 데이터베이스 연결 테스트 ===');
+      const testResult = await supabaseClient.from('training_materials').select('count').limit(1);
+      console.log('DB 연결 테스트 결과:', testResult.error ? testResult.error : '성공');
+      
+      if (testResult.error) {
+        console.error('DB 연결 실패:', testResult.error);
+        throw new Error(`데이터베이스 연결 실패: ${testResult.error.message}`);
+      }
+    } catch (dbError) {
+      console.error('DB 테스트 중 오류:', dbError);
+      throw new Error(`데이터베이스 테스트 실패: ${dbError.message}`);
+    }
 
     let processedContent = content;
     
@@ -205,6 +229,9 @@ serve(async (req) => {
     if (typeof content === 'string' && metadata?.fileType === 'application/pdf') {
       console.log('PDF 파일 감지 - 텍스트 추출 시작');
       processedContent = await extractPDFText(content, openaiApiKey);
+    } else if (typeof content === 'string') {
+      console.log('일반 텍스트 처리');
+      processedContent = content;
     }
 
     // 텍스트 검증
