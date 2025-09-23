@@ -16,24 +16,62 @@ const corsHeaders = {
 export async function extractPDFTextLocally(base64Content: string): Promise<{ text: string; pages: number }> {
   console.log("PDF 텍스트 추출 시작...");
 
-  // base64 → Uint8Array 변환
-  const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
-  const pdfData = Uint8Array.from(atob(cleanBase64), (c) => c.charCodeAt(0));
+  try {
+    // base64 → Uint8Array 변환
+    const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
+    const pdfData = Uint8Array.from(atob(cleanBase64), (c) => c.charCodeAt(0));
+    
+    console.log("PDF 데이터 크기:", pdfData.length);
 
-  // PDF 로딩
-  const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-  const pdf = await loadingTask.promise;
+    // PDF 로딩
+    const loadingTask = pdfjsLib.getDocument({ 
+      data: pdfData,
+      useSystemFonts: true,
+      disableFontFace: true,
+      verbosity: 0
+    });
+    const pdf = await loadingTask.promise;
+    
+    console.log("PDF 로드 완료, 페이지 수:", pdf.numPages);
 
-  let fullText = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item: any) => item.str).join(" ");
-    fullText += `\n\n[Page ${i}]\n${pageText}`;
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log(`페이지 ${i} 처리 중...`);
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str || "")
+        .filter(str => str.trim().length > 0)
+        .join(" ");
+      
+      if (pageText.trim()) {
+        fullText += `\n\n[Page ${i}]\n${pageText}`;
+        console.log(`페이지 ${i} 텍스트 길이:`, pageText.length);
+      } else {
+        console.log(`페이지 ${i}는 텍스트가 없음 (이미지일 가능성)`);
+      }
+    }
+
+    const finalText = fullText.trim();
+    console.log("PDF 텍스트 추출 완료, 총 텍스트 길이:", finalText.length);
+    
+    if (finalText.length < 50) {
+      console.log("추출된 텍스트가 너무 짧음 - 스캔본 PDF일 가능성");
+      return { 
+        text: "이 PDF는 스캔본이거나 텍스트가 포함되지 않은 이미지 PDF입니다. OCR 처리가 필요합니다.", 
+        pages: pdf.numPages 
+      };
+    }
+    
+    return { text: finalText, pages: pdf.numPages };
+    
+  } catch (error) {
+    console.error("PDF 처리 오류:", error);
+    return { 
+      text: `PDF 처리 중 오류 발생: ${error.message}. 파일이 손상되었거나 지원되지 않는 형식일 수 있습니다.`, 
+      pages: 1 
+    };
   }
-
-  console.log("PDF 텍스트 추출 완료, 페이지 수:", pdf.numPages);
-  return { text: fullText.trim(), pages: pdf.numPages };
 }
 
 // --- 한글 비율 검사 ---
