@@ -8,24 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// PDF 처리 함수 (간단한 폴백)
-export async function extractPDFTextLocally(base64Content: string): Promise<{ text: string; pages: number }> {
-  console.log("PDF 파일 감지 - 현재는 기본 처리만 지원");
-  
-  // PDF 파일의 경우 현재는 기본 메시지 반환
-  // 실제 PDF 텍스트 추출을 위해서는 별도 OCR 서비스나 PDF 파싱 라이브러리 필요
-  return {
-    text: `PDF 파일이 업로드되었습니다.
-파일 크기: ${Math.round(base64Content.length * 0.75)} bytes
-업로드 시간: ${new Date().toLocaleString('ko-KR')}
-이 PDF 문서는 학습 자료로 처리되었습니다.
-
-PDF 파일의 텍스트 내용을 추출하려면 별도의 처리가 필요합니다.
-현재는 기본 텍스트로 저장되며, 추후 OCR 또는 다른 방식으로 개선할 수 있습니다.`,
-    pages: 1
-  };
-}
-
 // --- 한글 비율 검사 ---
 function koreanRatio(text: string) {
   const total = Math.max(1, text.length);
@@ -40,6 +22,8 @@ serve(async (req) => {
   try {
     const { content, metadata } = await req.json();
     console.log("요청 메타데이터:", metadata);
+    console.log("콘텐츠 타입:", typeof content);
+    console.log("콘텐츠 길이:", content?.length || 0);
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -49,32 +33,23 @@ serve(async (req) => {
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiApiKey) throw new Error("OPENAI_API_KEY가 설정되어 있지 않습니다.");
 
+    // 텍스트 콘텐츠 처리
     let processedContent = "";
-    let pageCount = 0;
-
-    // PDF 처리
-    if (typeof content === "string" && metadata?.fileType === "application/pdf") {
-      const { text, pages } = await extractPDFTextLocally(content);
-      processedContent = text;
-      pageCount = pages;
-    } else if (typeof content === "string") {
+    
+    if (typeof content === "string") {
       processedContent = content.trim().normalize("NFC");
+      console.log("텍스트 처리 완료, 길이:", processedContent.length);
+    } else {
+      throw new Error("지원되지 않는 파일 형식입니다. 텍스트 파일(.txt)만 지원됩니다.");
     }
 
     if (!processedContent || processedContent.length < 20) {
-      throw new Error("텍스트 추출 실패 또는 콘텐츠가 너무 짧습니다.");
+      throw new Error("텍스트 내용이 너무 짧거나 비어있습니다. 최소 20자 이상 입력해주세요.");
     }
 
-    // 한글 비율 검사
+    // 한글 비율 검사 (한글 문서인 경우)
     const krRatio = koreanRatio(processedContent);
     console.log("한글비율:", krRatio.toFixed(3));
-
-    if ((metadata?.expectedLanguage === "ko" || (metadata?.title || "").includes("당직")) && krRatio < 0.02) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "텍스트 추출 시 한글 비율이 낮습니다. 이 파일은 스캔본(PDF 이미지)일 가능성이 높습니다. OCR 처리가 필요합니다.",
-      }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" }});
-    }
 
     // --- Supabase 저장 ---
     const materialRow = {
@@ -86,6 +61,7 @@ serve(async (req) => {
     const materialInsert = await supabaseClient.from("training_materials").insert([materialRow]).select("id").single();
     if (materialInsert.error) throw new Error(`training_materials 저장 실패: ${materialInsert.error.message}`);
     const parentMaterialId = materialInsert.data?.id;
+    console.log("training_materials id:", parentMaterialId);
 
     // --- 청크 생성 ---
     const chunkSize = 1000;
@@ -95,6 +71,8 @@ serve(async (req) => {
       const chunk = chars.slice(i, i + chunkSize).join("").trim();
       if (chunk.length > 20) chunks.push(chunk);
     }
+
+    console.log("청크 개수:", chunks.length);
 
     // --- 임베딩 생성 및 저장 ---
     for (let i = 0; i < chunks.length; i++) {
@@ -110,7 +88,12 @@ serve(async (req) => {
         body: JSON.stringify({ model: "text-embedding-3-small", input: chunk }),
       });
 
-      if (!embRes.ok) throw new Error("임베딩 생성 실패");
+      if (!embRes.ok) {
+        const errorText = await embRes.text();
+        console.error("임베딩 API 오류:", errorText);
+        throw new Error(`임베딩 생성 실패: ${embRes.statusText}`);
+      }
+      
       const embJson = await embRes.json();
       const vector = embJson.data?.[0]?.embedding;
 
@@ -124,15 +107,17 @@ serve(async (req) => {
       const insertVec = await supabaseClient.from("training_vectors").insert([vecRow]).select("id").single();
       if (insertVec.error) throw new Error(`training_vectors 저장 실패: ${insertVec.error.message}`);
 
+      console.log(`청크 ${i + 1}/${chunks.length} 저장 완료 (vector id: ${insertVec.data.id})`);
+
       if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 200));
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: `원본은 1건 저장되고, 임베딩은 ${chunks.length}개 청크로 저장되었습니다.`,
+      message: `텍스트가 ${chunks.length}개 청크로 성공적으로 벡터화되어 저장되었습니다.`,
       material_id: parentMaterialId,
       chunks: chunks.length,
-      pages: pageCount,
+      korean_ratio: krRatio,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
 
   } catch (err) {

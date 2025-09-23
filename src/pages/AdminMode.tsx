@@ -178,36 +178,37 @@ const AdminMode = () => {
     }
   };
 
-// ArrayBuffer → Base64 안전 변환 함수
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000; // 32KB 단위로 처리 (성능 + 메모리 안정성)
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode.apply(null, chunk as any);
-  }
-  return btoa(binary);
-}
 
 // Training material upload handler
 const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
+  // 텍스트 파일만 허용
+  if (!file.type.startsWith('text/') && !file.name.toLowerCase().endsWith('.txt')) {
+    toast({
+      title: "파일 형식 오류",
+      description: "텍스트 파일(.txt)만 업로드 가능합니다.",
+      variant: "destructive",
+    });
+    return;
+  }
+
   setIsLoading(true);
 
   try {
     const reader = new FileReader();
     reader.onload = async (e) => {
-      let content: string;
+      const content = e.target?.result as string;
 
-      // PDF 파일인 경우 → 안전하게 base64 변환
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        content = arrayBufferToBase64(arrayBuffer);   // ✅ 여기만 바뀜
-      } else {
-        content = e.target?.result as string;
+      if (!content || content.trim().length < 20) {
+        toast({
+          title: "파일 내용 오류",
+          description: "파일 내용이 너무 짧거나 비어있습니다.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
       }
 
       const { error } = await supabase.functions.invoke('vectorize-content', {
@@ -225,7 +226,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
         console.error('Training upload error:', error);
         toast({
           title: "오류",
-          description: "교육자료 업로드에 실패했습니다.",
+          description: `교육자료 업로드에 실패했습니다: ${error.message}`,
           variant: "destructive",
         });
       } else {
@@ -238,12 +239,8 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
       setIsLoading(false);
     };
 
-    // PDF → ArrayBuffer, TXT → Text 로 읽기
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
+    // 텍스트 파일로 읽기
+    reader.readAsText(file, 'UTF-8');
   } catch (error) {
     console.error('File reading error:', error);
     toast({
@@ -1025,16 +1022,17 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
                 <CardHeader>
                   <CardTitle>교육자료 업로드</CardTitle>
                   <CardDescription>
-                    PDF 파일(.pdf) 또는 텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
+                    한글 문서의 경우 텍스트 파일로 저장 후 업로드해주세요.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="training-file">교육자료 파일</Label>
+                    <Label htmlFor="training-file">교육자료 파일 (텍스트만)</Label>
                     <Input 
                       id="training-file" 
                       type="file" 
-                      accept=".pdf,.txt"
+                      accept=".txt,text/plain"
                       onChange={handleTrainingUpload}
                     />
                   </div>
