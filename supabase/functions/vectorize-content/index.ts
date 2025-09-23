@@ -180,21 +180,29 @@ serve(async (req) => {
         if (extractedText && extractedText.length > 20) {
           // 텍스트 추출 성공
           processedContent = extractedText;
-          console.log("HWP 텍스트 추출 성공, 길이:", processedContent.length);
+          console.log("HWP 텍스트 추출 성공!");
+          console.log("추출된 텍스트 길이:", processedContent.length);
+          console.log("추출된 텍스트 샘플 (처음 300자):", processedContent.substring(0, 300));
+          console.log("한글 포함 여부:", /[가-힣]/.test(processedContent));
         } else {
           // 텍스트 추출 실패 - 기본 메시지 사용
           console.log("HWP 텍스트 추출 실패 - 기본 메시지 사용");
-          processedContent = `한글 파일(.hwp)이 업로드되었습니다.
+          console.log("추출 시도 결과 길이:", extractedText?.length || 0);
+          processedContent = `한글 파일(.hwp) 업로드 완료
 파일명: ${metadata?.title || 'unknown.hwp'}
 파일 크기: ${Math.round(content.length * 0.75)} bytes
 업로드 시간: ${new Date().toLocaleString('ko-KR')}
 
 이 한글 파일은 학습 자료로 등록되었습니다.
-텍스트 추출에 실패했습니다. 더 정확한 텍스트 추출을 위해서는 
-한글 프로그램에서 '파일 > 내보내기 > 텍스트 파일(.txt)'로 저장 후 
-다시 업로드해주시기 바랍니다.
+현재 HWP 파일에서 텍스트 자동 추출을 시도했지만 실패했습니다.
 
-※ HWP 파일의 복잡한 구조로 인해 완전한 텍스트 추출이 어려울 수 있습니다.`;
+더 정확한 텍스트 추출을 위해서는 다음 방법을 권장합니다:
+1. 한글 프로그램에서 해당 파일을 열기
+2. '파일 > 내보내기 > 텍스트 파일(.txt)'로 저장
+3. 저장된 텍스트 파일을 다시 업로드
+
+※ HWP 파일의 복잡한 구조나 이미지/표 위주의 내용으로 인해 
+   자동 텍스트 추출이 어려울 수 있습니다.`;
         }
       } else {
         // 일반 텍스트 파일
@@ -227,14 +235,29 @@ serve(async (req) => {
 
     // --- 청크 생성 ---
     const chunkSize = 1000;
+    console.log("원본 텍스트 길이:", processedContent.length);
+    console.log("텍스트 샘플 (처음 200자):", processedContent.substring(0, 200));
+    
     const chars = Array.from(processedContent);
     const chunks: string[] = [];
+    
     for (let i = 0; i < chars.length; i += chunkSize) {
       const chunk = chars.slice(i, i + chunkSize).join("").trim();
-      if (chunk.length > 20) chunks.push(chunk);
+      console.log(`청크 ${chunks.length + 1} 길이:`, chunk.length);
+      
+      if (chunk.length > 20) {
+        chunks.push(chunk);
+        console.log(`청크 ${chunks.length} 내용 샘플:`, chunk.substring(0, 100) + "...");
+      } else {
+        console.log(`청크 ${chunks.length + 1} 너무 짧아서 제외됨 (${chunk.length}자)`);
+      }
     }
 
-    console.log("청크 개수:", chunks.length);
+    console.log("총 생성된 청크 개수:", chunks.length);
+    
+    if (chunks.length === 0) {
+      throw new Error("처리 가능한 텍스트 청크가 생성되지 않았습니다. 텍스트 내용을 확인해주세요.");
+    }
 
     // --- 임베딩 생성 및 저장 ---
     for (let i = 0; i < chunks.length; i++) {
