@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/components/ui/use-toast";
 import { SimilarComplaintsButtons } from "@/components/SimilarComplaintsButtons";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft } from "lucide-react";
+import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft, Shield, Clock, Thermometer, Home, Settings } from "lucide-react";
 
 interface DutySchedule {
   id: string;
@@ -414,40 +414,45 @@ ${complaintForm.description}
       <div className="flex-1 flex gap-4 p-4 max-w-7xl mx-auto w-full h-[calc(100vh-112px)]">
         {/* Left Sidebar - Department List (Fixed) */}
         <div className="w-80 flex-shrink-0">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="w-5 h-5" />
+          <Card className="h-full rounded-3xl shadow-large bg-gradient-card border-0 overflow-hidden animate-fade-in">
+            <CardHeader className="bg-gradient-secondary rounded-t-3xl">
+              <CardTitle className="flex items-center gap-3 text-lg">
+                <div className="bg-primary/20 rounded-xl p-2">
+                  <Phone className="w-5 h-5 text-primary" />
+                </div>
                 부서별 당직 현황
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-muted-foreground">
                 부서를 더블클릭하면 상세정보를 확인할 수 있습니다.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[calc(100vh-280px)]">
-                <div className="space-y-2 p-4">
-                  {dutySchedules.map((duty) => {
+                <div className="space-y-3 p-6">
+                  {dutySchedules.map((duty, index) => {
                     const isAvailable = isDutyAvailable(duty.duty_day);
                     return (
                       <div
                         key={duty.id}
-                        className="p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                        className="p-4 border rounded-2xl cursor-pointer hover:bg-accent transition-all duration-300 hover:scale-105 hover:shadow-soft animate-slide-in group"
+                        style={{ animationDelay: `${index * 0.1}s` }}
                         onDoubleClick={() => setSelectedDuty(duty)}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-medium">{duty.department_name}</div>
-                          <div className={`w-3 h-3 rounded-full ${
-                            isAvailable ? 'bg-blue-500' : 'bg-red-500'
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="font-medium text-foreground group-hover:text-primary transition-colors">
+                            {duty.department_name}
+                          </div>
+                          <div className={`w-4 h-4 rounded-full transition-all duration-300 ${
+                            isAvailable ? 'bg-primary shadow-soft' : 'bg-destructive'
                           }`} />
                         </div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                        <div className="text-sm text-muted-foreground flex items-center gap-2 mt-2">
                           <Calendar className="w-3 h-3" />
-                          {duty.duty_day}
+                          <span>{duty.duty_day}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                        <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                           <Phone className="w-3 h-3" />
-                          {duty.phone_number}
+                          <span>{duty.phone_number}</span>
                         </div>
                       </div>
                     );
@@ -460,20 +465,22 @@ ${complaintForm.description}
 
         {/* Center - Chat Interface */}
         <div className={`flex-1 ${showComplaintForm ? 'mr-4' : ''}`}>
-          <Card className="h-full flex flex-col shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 flex-shrink-0">
+          <Card className="h-full flex flex-col rounded-3xl shadow-large bg-gradient-card border-0 overflow-hidden animate-fade-in">
+            <CardHeader className="bg-gradient-secondary rounded-t-3xl flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-xl">
-                    <MessageCircle className="w-6 h-6 text-primary" />
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <div className="bg-primary/20 rounded-xl p-2">
+                      <MessageCircle className="w-6 h-6 text-primary" />
+                    </div>
                     🤖 AI 민원 상담
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-base mt-2">
                     민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="complaint-cases-toggle" className="text-sm font-medium">
+                <div className="flex items-center gap-3 bg-white/50 rounded-2xl p-3 backdrop-blur-sm">
+                  <label htmlFor="complaint-cases-toggle" className="text-sm font-medium text-foreground">
                     유사민원 참고하기
                   </label>
                   <Switch
@@ -486,18 +493,19 @@ ${complaintForm.description}
             </CardHeader>
             
             <CardContent className="flex-1 flex flex-col p-0 min-h-0">
-              <ScrollArea className="flex-1 p-4">
+              <ScrollArea className="flex-1 p-6">
                 <div className="space-y-4">
-                  {chatMessages.map((message) => (
+                  {chatMessages.map((message, index) => (
                     <div
                       key={message.id}
-                      className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex animate-slide-in ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                      style={{ animationDelay: `${index * 0.1}s` }}
                     >
                       <div
-                        className={`max-w-[80%] p-3 rounded-lg ${
+                        className={`max-w-[80%] p-4 rounded-2xl shadow-soft ${
                           message.type === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
+                            ? 'bg-gradient-primary text-white'
+                            : 'bg-white border border-border'
                         }`}
                       >
                         <div className="whitespace-pre-wrap">{message.content}</div>
@@ -545,14 +553,16 @@ ${complaintForm.description}
         {/* Right Sidebar - Complaint Form Toggle */}
         {showComplaintForm && (
           <div className="w-80 flex-shrink-0">
-            <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between">
+            <Card className="h-full rounded-3xl shadow-large bg-gradient-card border-0 overflow-hidden animate-fade-in">
+              <CardHeader className="bg-gradient-secondary rounded-t-3xl flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="bg-primary/20 rounded-xl p-2">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
                     민원 등록 서식
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="mt-2">
                     간단한 정보 입력으로 정리된 민원 문구를 생성합니다.
                   </CardDescription>
                 </div>
@@ -560,32 +570,34 @@ ${complaintForm.description}
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowComplaintForm(false)}
-                  className="h-8 w-8 p-0"
+                  className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all duration-300"
                 >
                   ✕
                 </Button>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="complaint-type">민원 유형</Label>
+              <CardContent className="space-y-6 p-6">
+                <div className="space-y-3">
+                  <Label htmlFor="complaint-type" className="text-sm font-medium text-foreground">민원 유형</Label>
                   <Input
                     id="complaint-type"
                     placeholder="예: 정전 민원"
                     value={complaintForm.type}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, type: e.target.value }))}
+                    className="rounded-2xl border-2 border-border/50 focus:border-primary bg-white shadow-soft px-4 py-3"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="complaint-location">발생 장소</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="complaint-location" className="text-sm font-medium text-foreground">발생 장소</Label>
                   <Input
                     id="complaint-location"
                     placeholder="예: 당진시청"
                     value={complaintForm.location}
                     onChange={(e) => setComplaintForm(prev => ({ ...prev, location: e.target.value }))}
+                    className="rounded-2xl border-2 border-border/50 focus:border-primary bg-white shadow-soft px-4 py-3"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="complaint-phone">신고자 번호</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="complaint-phone" className="text-sm font-medium text-foreground">신고자 번호</Label>
                   <Input
                     id="complaint-phone"
                     placeholder="010-1234-5678"
@@ -618,40 +630,43 @@ ${complaintForm.description}
 
       {/* Detail Dialog */}
       <Dialog open={!!selectedDuty} onOpenChange={() => setSelectedDuty(null)}>
-        <DialogContent>
+        <DialogContent className="rounded-3xl shadow-large border-0 bg-gradient-card">
           <DialogHeader>
-            <DialogTitle>당직 상세 정보</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl flex items-center gap-3">
+              <div className="bg-primary/20 rounded-xl p-2">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              당직 상세 정보
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
               {selectedDuty?.department_name} 당직 정보
             </DialogDescription>
           </DialogHeader>
           {selectedDuty && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>부서명</Label>
-                  <div className="font-medium">{selectedDuty.department_name}</div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-white/50 rounded-2xl p-4 backdrop-blur-sm">
+                  <Label className="text-sm font-medium text-muted-foreground">부서명</Label>
+                  <div className="font-medium text-foreground mt-1">{selectedDuty.department_name}</div>
                 </div>
-                <div>
-                  <Label>근무시설</Label>
-                  <div className="font-medium">{selectedDuty.duty_facility}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>근무요일</Label>
-                  <div className="font-medium">
-                    {selectedDuty.duty_day}
-                  </div>
-                </div>
-                <div>
-                  <Label>전화번호</Label>
-                  <div className="font-medium">{selectedDuty.phone_number}</div>
+                <div className="bg-white/50 rounded-2xl p-4 backdrop-blur-sm">
+                  <Label className="text-sm font-medium text-muted-foreground">근무시설</Label>
+                  <div className="font-medium text-foreground mt-1">{selectedDuty.duty_facility}</div>
                 </div>
               </div>
-              <div>
-                <Label>비고</Label>
-                <div className="mt-1 p-2 bg-muted rounded">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-white/50 rounded-2xl p-4 backdrop-blur-sm">
+                  <Label className="text-sm font-medium text-muted-foreground">근무요일</Label>
+                  <div className="font-medium text-foreground mt-1">{selectedDuty.duty_day}</div>
+                </div>
+                <div className="bg-white/50 rounded-2xl p-4 backdrop-blur-sm">
+                  <Label className="text-sm font-medium text-muted-foreground">전화번호</Label>
+                  <div className="font-medium text-foreground mt-1">{selectedDuty.phone_number}</div>
+                </div>
+              </div>
+              <div className="bg-white/50 rounded-2xl p-4 backdrop-blur-sm">
+                <Label className="text-sm font-medium text-muted-foreground">비고</Label>
+                <div className="mt-2 p-3 bg-muted/50 rounded-xl">
                   {selectedDuty.remarks || '등록된 비고 사항이 없습니다.'}
                 </div>
               </div>
