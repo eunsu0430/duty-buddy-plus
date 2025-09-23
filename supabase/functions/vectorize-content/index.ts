@@ -1,6 +1,8 @@
 // --- 필요한 모듈 임포트 ---
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://eextractPDFTextLocallysm.sh/@supabase/supabase-js@2.7.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+
+
 // pdf.js (esm.sh 경유 - 러버블 호환)
 import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.269/es5/build/pdf.js";
 
