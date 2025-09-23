@@ -1,27 +1,39 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@3.4.120";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF 파일은 텍스트로 처리 (스캔본은 지원 안함)
-async function processPDFContent(base64Content: string): Promise<string> {
-  try {
-    console.log('PDF 파일을 텍스트로 처리 시도');
-    
-    // PDF 내용을 그대로 텍스트로 처리
-    // 실제 PDF 텍스트 추출은 복잡하므로 base64 내용을 직접 사용
-    const textContent = `PDF 문서 내용 (Base64): ${base64Content.substring(0, 1000)}...`;
-    
-    console.log('PDF 처리 완료');
-    return textContent;
-  } catch (error) {
-    console.error('PDF 처리 실패:', error);
-    throw new Error('PDF 파일 처리에 실패했습니다. 텍스트 파일로 업로드해주세요.');
+// PDF 텍스트 추출 (pdfjs-dist 사용)
+async function extractPDFTextLocally(base64Content: string): Promise<string> {
+  console.log('PDF 텍스트 추출 시작 (pdfjs-dist 사용)');
+
+  // data:application/pdf;base64, 접두사 제거
+  const cleanBase64 = base64Content.includes(",") 
+    ? base64Content.split(",")[1] 
+    : base64Content;
+
+  // Base64 → Uint8Array 변환
+  const pdfData = Uint8Array.from(atob(cleanBase64), c => c.charCodeAt(0));
+
+  // PDF 로드
+  const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+  const pdf = await loadingTask.promise;
+
+  let textContent = '';
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const text = await page.getTextContent();
+    const pageText = text.items.map((item: any) => item.str).join(' ');
+    textContent += `\n${pageText}`;
   }
+
+  console.log(`PDF 텍스트 추출 완료: ${textContent.length}자`);
+  return textContent.trim();
 }
 
 serve(async (req) => {
@@ -47,10 +59,10 @@ serve(async (req) => {
 
     let processedContent = content;
 
-    // PDF 파일이면 간단 처리
+    // PDF 파일이면 로컬 텍스트 추출
     if (typeof content === 'string' && metadata?.fileType === 'application/pdf') {
-      console.log('PDF 파일 감지 - 기본 처리 시작');
-      processedContent = await processPDFContent(content);
+      console.log('PDF 파일 감지 → 텍스트 추출 시작');
+      processedContent = await extractPDFTextLocally(content);
     } else if (typeof content === 'string') {
       console.log('일반 텍스트 처리');
       processedContent = content;
@@ -67,12 +79,10 @@ serve(async (req) => {
     const chunks: string[] = [];
     for (let i = 0; i < processedContent.length; i += chunkSize) {
       const chunk = processedContent.slice(i, i + chunkSize).trim();
-      if (chunk.length > 20) {
-        chunks.push(chunk);
-      }
+      if (chunk.length > 20) chunks.push(chunk);
     }
 
-    console.log(`텍스트를 ${chunks.length}개 청크로 분할`);
+    console.log(`텍스트 ${chunks.length}개 청크로 분할`);
 
     if (chunks.length === 0) {
       throw new Error('생성된 텍스트 청크가 없습니다.');
@@ -93,7 +103,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'text-embedding-3-small',
+          model: 'text-embedding-3-small', // 1536차원
           input: chunk
         }),
       });
@@ -145,11 +155,9 @@ serve(async (req) => {
         throw new Error(`training_vectors 저장 실패: ${vectorsResult.error.message}`);
       }
 
-      console.log(`청크 ${i + 1}/${chunks.length} 저장 완료`);
-
-      // API 제한 방지를 위한 대기
+      console.log(`청크 ${i + 1} 저장 완료`);
       if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 200)); // API Rate 제한 방지
       }
     }
 
