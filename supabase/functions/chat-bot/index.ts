@@ -110,7 +110,7 @@ serve(async (req) => {
 
     // 4. 교육자료가 없을 때 처리
     if (!similarTraining || similarTraining.length === 0) {
-      // 토글이 ON이고 유사민원이 있을 때
+      // 토글이 ON이고 유사민원이 있을 때만 civil complaints 참고
       if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
         // AI가 유사민원 조치내용을 정리해서 설명하도록 요청
         const civilContext = similarComplaints.map((complaint, index) => {
@@ -166,7 +166,7 @@ ${civilContext}
         }
       }
       
-      // 토글이 OFF이거나 유사민원도 없을 때
+      // 교육자료가 없을 때는 항상 "관련 매뉴얼이 없다"고 답변
       return new Response(JSON.stringify({ 
         reply: "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요.",
         similarComplaints: []
