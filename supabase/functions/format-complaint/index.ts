@@ -18,7 +18,7 @@ serve(async (req) => {
     
     console.log('민원서식 정리 요청:', { type, location, reporter, description });
 
-    const systemPrompt = `당신은 민원등록서식 전문 작성자입니다. 사용자가 제공한 정보만을 사용해서 간단하고 직접적인 민원등록서식을 작성해주세요.
+    const systemPrompt = `당신은 민원등록서식 전문 작성자입니다. 사용자가 제공한 정보만을 사용해서 간단하고 공무원 공문체 단어들로 민원등록서식을 작성해주세요.
 
 중요 규칙:
 1. 사용자가 제공하지 않은 정보는 절대 추가하지 마세요
@@ -33,8 +33,6 @@ serve(async (req) => {
 
 [민원 내용]
 [사용자가 제공한 상세내용을 한 줄로 간단히 정리]
-
-처리 부탁드립니다.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
