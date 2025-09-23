@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, context, getSimilarOnly } = await req.json();
+    const { message, context, includeComplaintCases } = await req.json();
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -46,39 +46,37 @@ serve(async (req) => {
     
     console.log('질문 벡터화 완료');
 
-    // 2. 벡터 유사도 검색으로 가장 유사한 민원 데이터 찾기
-    const { data: similarComplaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
-      query_embedding: queryVector,
-      match_threshold: getSimilarOnly ? 0.7 : 0.78, // getSimilarOnly일 때는 더 넓은 범위로 검색
-      match_count: getSimilarOnly ? 6 : 3  // getSimilarOnly일 때는 6개까지
-    });
-
-    // 3. 교육자료에서도 검색
+    // 2. 교육자료에서 검색 (항상 수행)
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.7, // 임계값을 0.7로 통일
-      match_count: 2
+      match_threshold: 0.7,
+      match_count: 3
     });
 
-    console.log('벡터 검색 결과:', { 
-      complaints: similarComplaints?.length || 0, 
+    console.log('교육자료 검색 결과:', { 
       training: similarTraining?.length || 0 
     });
 
-    // getSimilarOnly가 true이면 유사민원만 반환
-    if (getSimilarOnly) {
-      return new Response(JSON.stringify({ 
-        similarComplaints: similarComplaints || []
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // 3. 유사민원 검색 (토글이 ON일 때만)
+    let similarComplaints = [];
+    if (includeComplaintCases) {
+      const { data: complaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
+        query_embedding: queryVector,
+        match_threshold: 0.75,
+        match_count: 3
+      });
+      
+      similarComplaints = complaints || [];
+      console.log('유사민원 검색 결과:', { 
+        complaints: similarComplaints.length 
       });
     }
 
-    // 4. 유사한 민원이 없으면 안내 메시지
-    if ((!similarComplaints || similarComplaints.length === 0) && 
-        (!similarTraining || similarTraining.length === 0)) {
+    // 4. 교육자료가 없으면 안내 메시지
+    if (!similarTraining || similarTraining.length === 0) {
       return new Response(JSON.stringify({ 
-        reply: "죄송합니다. 유사한 민원이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요." 
+        reply: "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요.",
+        similarComplaints: includeComplaintCases ? similarComplaints : []
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -97,8 +95,8 @@ serve(async (req) => {
       });
     }
     
-    // 유사 민원 사례 정보
-    if (similarComplaints && similarComplaints.length > 0) {
+    // 유사 민원 사례 정보 (토글이 ON일 때만)
+    if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
       complaintCases = '\n\n=== 유사민원사례 ===\n';
       similarComplaints.forEach((complaint, index) => {
         const metadata = complaint.metadata || {};
@@ -125,19 +123,19 @@ serve(async (req) => {
 **처리방법:**
 - 교육자료를 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
 
-**유사민원사례:**
+${includeComplaintCases ? `**참고 사례:**
 ${similarComplaints && similarComplaints.length > 0 ? 
   `총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다. 상세 내용은 아래 버튼을 클릭하여 확인하실 수 있습니다.` : 
-  '유사한 민원사례가 없습니다.'}
+  '유사한 민원사례가 없습니다.'}` : ''}
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
 - 교육자료에 기반해서만 처리방법을 설명하세요
-- 유사민원사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요
+${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요' : ''}
 - 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
 
-제공된 정보:${trainingContext}${dutyInfo}`;
+제공된 정보:${trainingContext}${includeComplaintCases ? complaintCases : ''}${dutyInfo}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -165,10 +163,10 @@ ${similarComplaints && similarComplaints.length > 0 ?
 
     console.log('AI 답변 생성 완료');
 
-    // 유사민원 데이터를 응답에 포함
+    // 응답 반환 (토글이 ON일 때만 유사민원 포함)
     return new Response(JSON.stringify({ 
       reply,
-      similarComplaints: similarComplaints || []
+      similarComplaints: includeComplaintCases ? (similarComplaints || []) : []
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

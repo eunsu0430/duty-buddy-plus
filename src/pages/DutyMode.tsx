@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { SimilarComplaintsButtons } from "@/components/SimilarComplaintsButtons";
@@ -84,6 +85,7 @@ const DutyMode = () => {
   const [weather, setWeather] = useState({ temperature: 22, description: '맑음' });
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
+  const [includeComplaintCases, setIncludeComplaintCases] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -214,7 +216,8 @@ const DutyMode = () => {
       const { data, error } = await supabase.functions.invoke('chat-bot', {
         body: { 
           message: currentMessage,
-          context: `당직 부서 정보: ${context}`
+          context: `당직 부서 정보: ${context}`,
+          includeComplaintCases: includeComplaintCases
         }
       });
 
@@ -459,13 +462,27 @@ ${complaintForm.description}
         <div className={`flex-1 ${showComplaintForm ? 'mr-4' : ''}`}>
           <Card className="h-full flex flex-col shadow-lg">
             <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 flex-shrink-0">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <MessageCircle className="w-6 h-6 text-primary" />
-                🤖 AI 민원 상담
-              </CardTitle>
-              <CardDescription className="text-base">
-                민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <MessageCircle className="w-6 h-6 text-primary" />
+                    🤖 AI 민원 상담
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    민원 종류를 입력하시면 AI가 처리 방법과 등록 정보를 안내해드립니다.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="complaint-cases-toggle" className="text-sm font-medium">
+                    유사민원 참고하기
+                  </label>
+                  <Switch
+                    id="complaint-cases-toggle"
+                    checked={includeComplaintCases}
+                    onCheckedChange={setIncludeComplaintCases}
+                  />
+                </div>
+              </div>
             </CardHeader>
             
             <CardContent className="flex-1 flex flex-col p-0 min-h-0">
