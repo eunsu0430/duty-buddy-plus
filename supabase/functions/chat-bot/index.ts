@@ -50,6 +50,8 @@ serve(async (req) => {
     });
 
     // 2. 교육자료에서 검색 (항상 수행) - 더 낮은 임계값 사용
+    console.log('교육자료 검색 시작');
+    
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
       match_threshold: 0.1,  // 임계값을 매우 낮게 설정
@@ -60,9 +62,24 @@ serve(async (req) => {
       console.error('교육자료 검색 오류:', trainingError);
     }
     
+    // 임계값 없이 직접 테스트
+    console.log('직접 벡터 검색 테스트 시작');
+    const { data: directTest, error: directError } = await supabaseClient
+      .from('training_vectors')
+      .select('id, title, content')
+      .limit(5);
+      
+    if (directError) {
+      console.error('직접 검색 오류:', directError);
+    } else {
+      console.log('직접 검색 결과:', { count: directTest?.length || 0 });
+    }
+    
     console.log('교육자료 원시 검색 결과:', {
       searchParams: { threshold: 0.1, count: 10 },
       resultCount: similarTraining?.length || 0,
+      hasError: !!trainingError,
+      errorDetails: trainingError,
       results: similarTraining?.map(item => ({
         id: item.id,
         title: item.title?.substring(0, 50),
