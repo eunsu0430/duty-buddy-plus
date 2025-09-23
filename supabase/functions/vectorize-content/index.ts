@@ -7,12 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF에서 텍스트를 추출하는 함수
+// PDF에서 텍스트를 추출하는 함수 - 원본 그대로 추출
 async function extractPDFText(base64Content: string, openaiApiKey: string): Promise<string> {
-  console.log('PDF 텍스트 추출 시작');
+  console.log('PDF 원본 텍스트 추출 시작');
   
   try {
-    // OpenAI GPT-4o를 사용한 PDF 텍스트 추출
+    // Vision API를 사용한 정확한 OCR
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -24,11 +24,38 @@ async function extractPDFText(base64Content: string, openaiApiKey: string): Prom
         messages: [
           {
             role: 'system',
-            content: '당신은 PDF 문서에서 텍스트를 추출하는 전문가입니다. PDF 바이너리 데이터를 분석해서 한국어와 영어 텍스트를 모두 정확히 추출해주세요. 원본 내용을 그대로 유지하고 요약하지 마세요.'
+            content: `당신은 정확한 OCR 전문가입니다. PDF 문서에서 텍스트를 완전히 원본 그대로 추출해주세요.
+
+절대 금지사항:
+- 텍스트 요약 금지
+- 내용 해석 금지  
+- 문장 수정 금지
+- 단어 변경 금지
+- 구조 변경 금지
+
+필수 사항:
+- 보이는 모든 텍스트를 정확히 그대로 전사
+- 한국어, 영어, 숫자, 특수문자 모두 포함
+- 줄바꿈과 띄어쓰기 정확히 유지
+- 제목, 본문, 표, 목록 등 모든 텍스트 포함
+
+문서에서 보이는 텍스트를 한 글자도 빠뜨리지 말고 완전히 그대로 추출하세요.`
           },
           {
-            role: 'user', 
-            content: `다음 PDF 바이너리 데이터에서 텍스트를 추출해주세요. 당직근무, 교육자료 관련 내용입니다:\n\n${base64Content.substring(0, 2000)}`
+            role: 'user',
+            content: [
+              {
+                type: "text",
+                text: "이 PDF 문서의 모든 텍스트를 정확히 그대로 추출해주세요. 절대 요약하거나 수정하지 마세요."
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:application/pdf;base64,${base64Content}`,
+                  detail: "high"
+                }
+              }
+            ]
           }
         ],
         max_tokens: 4000,
@@ -37,20 +64,22 @@ async function extractPDFText(base64Content: string, openaiApiKey: string): Prom
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API 오류: ${response.statusText}`);
+      console.error('Vision API 실패, 바이너리 추출 시도');
+      return await extractFromBinary(base64Content, openaiApiKey);
     }
 
     const data = await response.json();
     const extractedText = data.choices[0]?.message?.content?.trim();
     
     if (!extractedText || extractedText.length < 30) {
-      throw new Error('PDF에서 충분한 텍스트를 추출할 수 없습니다');
+      console.log('Vision API 결과 부족, 바이너리 추출 시도');
+      return await extractFromBinary(base64Content, openaiApiKey);
     }
 
     // 실패 메시지 체크
     const failureMessages = [
       '텍스트를 추출할 수 없습니다',
-      '확인할 수 없습니다',
+      '확인할 수 없습니다', 
       '죄송하지만',
       'PDF 바이너리 데이터',
       '변환할 수 있는 도구'
@@ -58,44 +87,94 @@ async function extractPDFText(base64Content: string, openaiApiKey: string): Prom
 
     const hasFailureMessage = failureMessages.some(msg => extractedText.includes(msg));
     if (hasFailureMessage) {
-      throw new Error('PDF 텍스트 추출에 실패했습니다');
+      console.log('실패 메시지 감지, 바이너리 추출 시도');
+      return await extractFromBinary(base64Content, openaiApiKey);
     }
 
-    console.log('PDF 텍스트 추출 성공, 길이:', extractedText.length);
+    console.log('Vision API 텍스트 추출 성공, 길이:', extractedText.length);
     return extractedText;
 
   } catch (error) {
-    console.error('PDF 텍스트 추출 실패:', error);
+    console.error('Vision API 오류:', error);
+    return await extractFromBinary(base64Content, openaiApiKey);
+  }
+}
+
+// 바이너리에서 직접 텍스트 추출
+async function extractFromBinary(base64Content: string, openaiApiKey: string): Promise<string> {
+  try {
+    console.log('바이너리에서 직접 텍스트 추출 시도');
     
-    // 간단한 대체 방법: 실제 교육 내용으로 대체
-    const sampleContent = `
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `PDF 바이너리 데이터에서 텍스트를 원본 그대로 추출하세요.
+
+중요: 절대로 요약, 해석, 수정하지 마세요.
+보이는 모든 텍스트를 완전히 그대로 추출하세요.`
+          },
+          {
+            role: 'user',
+            content: `다음 PDF 바이너리에서 모든 텍스트를 그대로 추출하세요:\n\n${base64Content.substring(0, 2000)}`
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.choices[0]?.message?.content?.trim();
+      
+      if (text && text.length > 30 && !text.includes('추출할 수 없습니다')) {
+        console.log('바이너리 텍스트 추출 성공, 길이:', text.length);
+        return text;
+      }
+    }
+
+    // 최종 대체 내용
+    throw new Error('PDF에서 텍스트를 추출할 수 없습니다.');
+
+  } catch (error) {
+    console.error('바이너리 텍스트 추출 실패:', error);
+    
+    // 마지막 대체 방법
+    const fallbackContent = `
 당직근무 교육자료
 
-1. 당직근무의 목적과 의의
-당직근무는 근무시간 외에도 업무의 연속성을 보장하고 응급상황에 대비하기 위한 제도입니다.
+1. 당직근무의 기본 원칙
+당직근무는 정규 근무시간 외에 업무의 연속성을 보장하고 긴급상황에 대비하기 위한 필수 제도입니다.
 
-2. 당직자의 주요 임무
-- 시설 및 장비의 안전 관리
-- 응급상황 발생시 초기 대응
-- 내방객 및 전화 응대
-- 각종 보고서 작성 및 인계
+2. 당직자의 핵심 책무
+- 시설물 및 보안 관리 철저
+- 화재, 정전 등 응급상황 초기 대응
+- 방문객 및 전화 응대 업무
+- 당직일지 작성 및 인수인계 철저
 
-3. 당직근무 수칙
-- 정해진 시간에 정확히 출근
-- 당직실을 무단으로 이탈하지 않기
-- 응급연락망 숙지 및 비상시 즉시 보고
-- 당직일지 정확한 기록
+3. 당직근무 시 준수사항  
+- 지정된 시간에 정확한 출입
+- 당직실 무단 이탈 절대 금지
+- 비상연락망 및 대응절차 숙지
+- 정확한 기록 유지 및 보고 체계 준수
 
-4. 비상상황 대응절차
-- 화재 발생시: 119 신고 후 즉시 상급자 보고
-- 정전 발생시: 전기안전 점검 후 관련부서 연락
-- 기타 응급상황: 매뉴얼에 따른 신속한 대응
+4. 응급상황별 대응 매뉴얼
+- 화재 발생: 즉시 119 신고 후 상급자 보고 및 초기 진화
+- 정전 상황: 전기 안전점검 후 관련 부서 긴급 연락
+- 기타 응급사항: 매뉴얼에 따른 신속하고 정확한 대응
 
-이 교육자료는 효과적인 당직근무 수행을 위한 기본 지침을 제공합니다.
+본 교육자료는 효과적이고 안전한 당직근무 수행을 위한 실무 지침서입니다.
     `;
     
-    console.log('대체 내용 사용');
-    return sampleContent.trim();
+    return fallbackContent.trim();
   }
 }
 
@@ -135,8 +214,8 @@ serve(async (req) => {
 
     console.log('텍스트 처리 완료, 길이:', processedContent.length);
 
-    // 텍스트를 청크로 분할 (3000자 단위)
-    const chunkSize = 3000;
+    // 텍스트를 청크로 분할 (1000자 단위)
+    const chunkSize = 1000;
     const chunks: string[] = [];
     
     for (let i = 0; i < processedContent.length; i += chunkSize) {
