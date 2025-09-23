@@ -8,20 +8,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// PDF 텍스트 추출 (pdfjs-dist 사용)
-async function extractPDFTextLocally(base64Content: string): Promise<string> {
-  console.log('PDF 텍스트 추출 시작 (pdfjs-dist 사용)');
+// PDF 텍스트 추출 (pdfjs-dist)
+async function extractPDFTextLocally(base64Content: string): Promise<{ text: string; pages: number }> {
+  const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
+  const binary = atob(cleanBase64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
 
-  // data:application/pdf;base64, 접두사 제거
-  const cleanBase64 = base64Content.includes(",") 
-    ? base64Content.split(",")[1] 
-    : base64Content;
-
-  // Base64 → Uint8Array 변환
-  const pdfData = Uint8Array.from(atob(cleanBase64), c => c.charCodeAt(0));
-
-  // PDF 로드
-  const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+  const loadingTask = pdfjsLib.getDocument({ data: bytes });
   const pdf = await loadingTask.promise;
 
   let textContent = '';
@@ -29,23 +24,35 @@ async function extractPDFTextLocally(base64Content: string): Promise<string> {
     const page = await pdf.getPage(pageNum);
     const text = await page.getTextContent();
     const pageText = text.items.map((item: any) => item.str).join(' ');
-    textContent += `\n${pageText}`;
+    textContent += `\n=== Page ${pageNum} ===\n${pageText}`;
   }
 
-  console.log(`PDF 텍스트 추출 완료: ${textContent.length}자`);
-  return textContent.trim();
+  // 간단 정리: CR 제거, 중복 공백 축소, NFC 정규화
+  textContent = textContent.replace(/\r/g, '')
+                           .replace(/\t/g, ' ')
+                           .replace(/[ ]{2,}/g, ' ')
+                           .replace(/[ \t]+\n/g, '\n')
+                           .trim()
+                           .normalize('NFC');
+
+  return { text: textContent, pages: pdf.numPages };
+}
+
+// 한글 비율 검사 (간단 heuristic)
+function koreanRatio(text: string) {
+  const total = Math.max(1, text.length);
+  const koreans = (text.match(/[가-힣]/g) || []).length;
+  return koreans / total;
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const { content, metadata } = await req.json();
-    console.log('=== 벡터화 함수 시작 ===');
+
     console.log('요청 메타데이터:', metadata);
-    console.log('콘텐츠 길이:', typeof content === 'string' ? content.length : 'Not string');
+    console.log('content type:', typeof content);
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -53,132 +60,132 @@ serve(async (req) => {
     );
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API 키가 설정되지 않았습니다.');
-    }
+    if (!openaiApiKey) throw new Error('OPENAI_API_KEY가 설정되어 있지 않습니다.');
 
-    let processedContent = content;
+    let processedContent = typeof content === 'string' ? content : '';
+    let pageCount = 0;
 
-    // PDF 파일이면 로컬 텍스트 추출
     if (typeof content === 'string' && metadata?.fileType === 'application/pdf') {
-      console.log('PDF 파일 감지 → 텍스트 추출 시작');
-      processedContent = await extractPDFTextLocally(content);
+      console.log('PDF 감지 -> 텍스트 추출 시작');
+      const { text, pages } = await extractPDFTextLocally(content);
+      processedContent = text;
+      pageCount = pages;
+      console.log(`추출된 텍스트 길이: ${processedContent.length}, 페이지: ${pageCount}`);
     } else if (typeof content === 'string') {
-      console.log('일반 텍스트 처리');
-      processedContent = content;
+      processedContent = content.trim().normalize('NFC');
     }
 
-    if (!processedContent || processedContent.trim().length < 20) {
-      throw new Error('처리할 수 있는 텍스트 내용이 충분하지 않습니다.');
+    if (!processedContent || processedContent.length < 20) {
+      throw new Error('텍스트 추출 실패 또는 콘텐츠가 너무 짧습니다.');
     }
 
-    console.log('텍스트 처리 완료, 길이:', processedContent.length);
+    // 한글 비율 체크 (예: 한글 파일이면 비율이 충분히 높아야 함)
+    const krRatio = koreanRatio(processedContent);
+    console.log('한글비율:', krRatio.toFixed(3));
 
-    // 청크 분할 (1000자 단위)
+    // 한글 문서(또는 혼합문서)를 기대했는데 한글비율이 매우 낮다면 스캔본/인코딩문제 의심
+    if ((metadata?.expectedLanguage === 'ko' || (metadata?.title || '').includes('당직')) && krRatio < 0.02) {
+      // 2% 미만이면 의심 - 실제 기준은 상황에 따라 조정
+      console.error('한글비율이 매우 낮습니다. (스캔본 PDF 또는 인코딩 문제 가능)');
+      return new Response(JSON.stringify({
+        success: false,
+        error: '텍스트 추출 시 한글 비율이 낮습니다. 이 파일은 스캔본(PDF 이미지)일 가능성이 높습니다. OCR 처리(이미지->텍스트)가 필요합니다.'
+      }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
+    }
+
+    // 1) training_materials에는 원본(전체 텍스트) 한 row만 저장
+    const materialRow = {
+      title: metadata?.title || 'Training Material',
+      content: processedContent,
+      file_url: metadata?.fileUrl || null,
+      page_count: pageCount || null,
+      original_filename: metadata?.originalName || null
+    };
+
+    const materialInsert = await supabaseClient.from('training_materials').insert([materialRow]).select('id').single();
+
+    if (materialInsert.error) {
+      console.error('training_materials 저장 실패:', materialInsert.error);
+      throw new Error(`training_materials 저장 실패: ${materialInsert.error.message}`);
+    }
+
+    const parentMaterialId = materialInsert.data?.id;
+    console.log('training_materials id:', parentMaterialId);
+
+    // 2) 임베딩을 위한 청크 생성 (문자 단위 슬라이스 대신 grapheme-safe 방식)
     const chunkSize = 1000;
+    const chars = Array.from(processedContent); // surrogate-safe
     const chunks: string[] = [];
-    for (let i = 0; i < processedContent.length; i += chunkSize) {
-      const chunk = processedContent.slice(i, i + chunkSize).trim();
+    for (let i = 0; i < chars.length; i += chunkSize) {
+      const chunk = chars.slice(i, i + chunkSize).join('').trim();
       if (chunk.length > 20) chunks.push(chunk);
     }
+    console.log('청크 개수:', chunks.length);
 
-    console.log(`텍스트 ${chunks.length}개 청크로 분할`);
-
-    if (chunks.length === 0) {
-      throw new Error('생성된 텍스트 청크가 없습니다.');
-    }
-
-    // 각 청크 처리
+    // 3) 각 청크마다 임베딩 생성 및 training_vectors에 저장
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      const chunkTitle = `${metadata?.title || 'Training Material'} (${i + 1}/${chunks.length})`;
+      const title = `${materialRow.title} (${i + 1}/${chunks.length})`;
 
-      console.log(`청크 ${i + 1}/${chunks.length} 처리 중`);
-
-      // OpenAI Embedding 생성
-      const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+      // OpenAI embeddings
+      const embRes = await fetch('https://api.openai.com/v1/embeddings', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'text-embedding-3-small', // 1536차원
+          model: 'text-embedding-3-small',
           input: chunk
-        }),
+        })
       });
 
-      if (!embeddingResponse.ok) {
-        const errorText = await embeddingResponse.text();
-        console.error('임베딩 API 오류:', errorText);
-        throw new Error(`임베딩 생성 실패: ${embeddingResponse.statusText}`);
+      if (!embRes.ok) {
+        const txt = await embRes.text();
+        console.error('임베딩 API 오류:', embRes.status, txt);
+        throw new Error('임베딩 생성 실패');
       }
 
-      const embeddingData = await embeddingResponse.json();
-      const vector = embeddingData.data[0].embedding;
+      const embJson = await embRes.json();
+      const vector = embJson.data?.[0]?.embedding;
+      if (!vector || !Array.isArray(vector)) throw new Error('임베딩 결과 형식 오류');
 
-      // 메타데이터 생성
-      const chunkMetadata = {
-        ...metadata,
-        chunk_index: i + 1,
-        total_chunks: chunks.length,
-        original_title: metadata?.title || 'Training Material'
+      const vecRow = {
+        title,
+        content: chunk,
+        vector,
+        metadata: {
+          ...metadata,
+          parent_material_id: parentMaterialId,
+          chunk_index: i + 1,
+          total_chunks: chunks.length
+        }
       };
 
-      // DB 저장
-      const [materialsResult, vectorsResult] = await Promise.all([
-        supabaseClient
-          .from('training_materials')
-          .insert([{
-            title: chunkTitle,
-            content: chunk,
-            file_url: null,
-          }]),
-        
-        supabaseClient
-          .from('training_vectors')
-          .insert([{
-            title: chunkTitle,
-            content: chunk,
-            vector: vector,
-            metadata: chunkMetadata
-          }])
-      ]);
-
-      if (materialsResult.error) {
-        console.error('training_materials 저장 오류:', materialsResult.error);
-        throw new Error(`training_materials 저장 실패: ${materialsResult.error.message}`);
-      }
-      
-      if (vectorsResult.error) {
-        console.error('training_vectors 저장 오류:', vectorsResult.error);
-        throw new Error(`training_vectors 저장 실패: ${vectorsResult.error.message}`);
+      const insertVec = await supabaseClient.from('training_vectors').insert([vecRow]).select('id').single();
+      if (insertVec.error) {
+        console.error('training_vectors 저장 오류:', insertVec.error);
+        throw new Error(`training_vectors 저장 실패: ${insertVec.error.message}`);
       }
 
-      console.log(`청크 ${i + 1} 저장 완료`);
-      if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200)); // API Rate 제한 방지
-      }
+      console.log(`청크 ${i + 1}/${chunks.length} 저장 완료 (vector id: ${insertVec.data?.id})`);
+      if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 200)); // rate limit 완화
     }
-
-    console.log(`모든 ${chunks.length}개 청크 처리 완료`);
 
     return new Response(JSON.stringify({
       success: true,
-      message: `학습 자료가 ${chunks.length}개 청크로 성공적으로 저장되었습니다.`,
-      chunks_processed: chunks.length
+      message: `원본은 1건 저장되고, 임베딩은 ${chunks.length}개 청크로 저장되었습니다.`,
+      material_id: parentMaterialId,
+      chunks: chunks.length
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-  } catch (error) {
-    console.error('vectorize-content 함수 오류:', error);
+  } catch (err) {
+    console.error('함수 오류:', err);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message || '학습 자료 처리 중 오류가 발생했습니다.'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      error: err.message || String(err)
+    }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
   }
 });
