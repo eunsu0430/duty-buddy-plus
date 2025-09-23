@@ -44,18 +44,32 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryVector = embeddingData.data[0].embedding;
     
-    console.log('질문 벡터화 완료');
+    console.log('질문 벡터화 완료', {
+      vectorLength: queryVector.length,
+      firstFewValues: queryVector.slice(0, 5)
+    });
 
-    // 2. 교육자료에서 검색 (항상 수행)
+    // 2. 교육자료에서 검색 (항상 수행) - 더 낮은 임계값 사용
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.5,  // threshold를 낮춤
-      match_count: 5
+      match_threshold: 0.1,  // 임계값을 매우 낮게 설정
+      match_count: 10
     });
 
     if (trainingError) {
       console.error('교육자료 검색 오류:', trainingError);
     }
+    
+    console.log('교육자료 원시 검색 결과:', {
+      searchParams: { threshold: 0.1, count: 10 },
+      resultCount: similarTraining?.length || 0,
+      results: similarTraining?.map(item => ({
+        id: item.id,
+        title: item.title?.substring(0, 50),
+        similarity: item.similarity,
+        contentPreview: item.content?.substring(0, 100)
+      })) || []
+    });
 
     console.log('교육자료 검색 결과:', { 
       training: similarTraining?.length || 0,
