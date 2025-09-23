@@ -7,13 +7,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// OpenAI GPT-4 Vision을 활용한 강력한 PDF OCR 텍스트 추출
+// OpenAI를 활용한 강력한 PDF OCR 텍스트 추출
 async function extractTextFromPDF(base64Content: string, openaiApiKey: string): Promise<string> {
+  console.log('PDF OCR 텍스트 추출 시작');
+  
   try {
-    console.log('PDF OCR 텍스트 추출 시작 - GPT-4 Vision 방식');
+    // PDF를 이미지로 변환하여 OCR 처리 - 여러 방법 시도
+    let extractedText = '';
     
-    // GPT-4 Vision을 사용하여 PDF를 직접 이미지로 처리
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // 방법 1: GPT-4o를 사용한 직접 PDF 텍스트 추출
+    console.log('GPT-4o로 PDF 텍스트 추출 시도');
+    
+    const directResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openaiApiKey}`,
@@ -24,31 +29,23 @@ async function extractTextFromPDF(base64Content: string, openaiApiKey: string): 
         messages: [
           {
             role: 'system',
-            content: `당신은 PDF 문서에서 텍스트를 정확하게 추출하는 OCR 전문가입니다. 
+            content: `당신은 PDF 문서에서 텍스트를 추출하는 전문가입니다.
 
-규칙:
-1. 문서에 있는 모든 텍스트를 정확하게 그대로 추출하세요
-2. 요약하거나 정리하지 말고 원본 텍스트를 그대로 반환하세요  
-3. 줄바꿈과 단락 구조를 유지하세요
-4. 한국어와 영어 모든 텍스트를 포함하세요
-5. 표나 목록의 구조도 최대한 유지하세요
+중요한 규칙:
+1. PDF에 있는 모든 텍스트를 완전히 그대로 추출하세요
+2. 절대 요약, 정리, 해석하지 마세요 - 원본 텍스트만 반환
+3. 한국어, 영어, 숫자 모든 문자를 포함하세요
+4. 줄바꿈과 단락 구조를 유지하세요
+5. 표, 목록, 제목 등의 구조도 그대로 유지하세요
+6. 텍스트가 없거나 읽을 수 없다면 "텍스트 추출 불가"라고 명시하세요
 
-PDF에서 추출한 모든 텍스트를 반환하세요.`
+PDF의 모든 텍스트를 그대로 추출해주세요.`
           },
           {
             role: 'user',
-            content: [
-              {
-                type: "text",
-                text: "이 PDF 문서에서 모든 텍스트를 정확히 추출해주세요. 당직근무, 교육자료, 업무 관련 내용이 포함되어 있습니다."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${base64Content}`
-                }
-              }
-            ]
+            content: `첨부된 PDF 파일에서 모든 텍스트를 추출해주세요. 텍스트를 요약하거나 정리하지 말고 원본 그대로 반환해주세요.
+
+데이터: ${base64Content.substring(0, 1000)}...`
           }
         ],
         max_tokens: 4000,
@@ -56,30 +53,91 @@ PDF에서 추출한 모든 텍스트를 반환하세요.`
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API 오류:', response.status, errorText);
+    if (directResponse.ok) {
+      const directData = await directResponse.json();
+      extractedText = directData.choices[0]?.message?.content?.trim() || '';
       
-      // Vision API 실패시 fallback으로 텍스트 기반 처리 시도
-      return await fallbackTextExtraction(base64Content, openaiApiKey);
+      if (extractedText && extractedText.length > 20 && !extractedText.includes('텍스트 추출 불가')) {
+        console.log('GPT-4o 직접 추출 성공, 길이:', extractedText.length);
+        return extractedText;
+      }
     }
 
-    const data = await response.json();
-    const extractedText = data.choices[0].message.content;
+    // 방법 2: 바이너리 데이터에서 직접 텍스트 패턴 추출
+    console.log('바이너리 패턴 추출 시도');
+    const binaryData = atob(base64Content);
     
-    if (!extractedText || extractedText.trim().length < 10) {
-      console.log('Vision API 결과 부족, fallback 시도');
-      return await fallbackTextExtraction(base64Content, openaiApiKey);
+    // PDF 텍스트 스트림 및 일반 텍스트 패턴 추출
+    const patterns = [
+      /\(([^)]*[\u3131-\u318E\u4E00-\u9FFF\uAC00-\uD7AF][^)]*)\)/g, // 괄호 안 한국어
+      /BT\s*([^ET]*)\s*ET/g, // PDF 텍스트 블록
+      /Tj\s*\(([^)]*)\)/g, // PDF 텍스트 객체
+      /[\u3131-\u318E\u4E00-\u9FFF\uAC00-\uD7AF\w\s.,!?;:()-]{10,}/g, // 연속된 텍스트
+    ];
+
+    let rawTexts: string[] = [];
+    
+    for (const pattern of patterns) {
+      const matches = [...binaryData.matchAll(pattern)];
+      rawTexts.push(...matches.map(match => match[1] || match[0]).filter(text => 
+        text && text.trim().length > 2 && /[\u3131-\u318E\u4E00-\u9FFF\uAC00-\uD7AFa-zA-Z0-9]/.test(text)
+      ));
     }
-    
-    console.log('GPT-4 Vision으로 추출된 텍스트 길이:', extractedText.length);
-    return extractedText.trim();
+
+    if (rawTexts.length > 0) {
+      const combinedText = [...new Set(rawTexts)]
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+        
+      if (combinedText.length > 50) {
+        // 추출된 텍스트를 GPT로 정리
+        console.log('추출된 텍스트를 GPT로 정리');
+        const cleanupResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content: '추출된 텍스트 조각들을 읽기 쉽게 정리하되, 모든 내용을 유지하고 요약하지 마세요. 단지 순서를 정리하고 중복을 제거해주세요.'
+              },
+              {
+                role: 'user',
+                content: `다음 PDF에서 추출된 텍스트 조각들을 정리해주세요. 모든 내용을 유지하되 읽기 쉽게 구성해주세요:\n\n${combinedText}`
+              }
+            ],
+            max_tokens: 3000,
+            temperature: 0
+          }),
+        });
+        
+        if (cleanupResponse.ok) {
+          const cleanupData = await cleanupResponse.json();
+          const cleanedText = cleanupData.choices[0]?.message?.content?.trim();
+          
+          if (cleanedText && cleanedText.length > 30) {
+            console.log('정리된 텍스트 추출 성공, 길이:', cleanedText.length);
+            return cleanedText;
+          }
+        }
+        
+        // 정리 실패시 원본 반환
+        console.log('바이너리 추출 텍스트 반환, 길이:', combinedText.length);
+        return combinedText;
+      }
+    }
+
+    // 모든 방법 실패시 오류
+    throw new Error('PDF에서 텍스트를 추출할 수 없습니다. 스캔된 이미지나 보호된 문서일 수 있습니다.');
     
   } catch (error) {
-    console.error('PDF Vision 처리 오류:', error);
-    
-    // 에러 발생시 fallback 시도
-    return await fallbackTextExtraction(base64Content, openaiApiKey);
+    console.error('PDF 텍스트 추출 실패:', error);
+    throw new Error(`PDF 텍스트 추출 실패: ${error.message}`);
   }
 }
 
@@ -173,18 +231,33 @@ serve(async (req) => {
 
     console.log('Processing content for vectorization:', metadata?.title);
 
-    // 콘텐츠 처리 - GPT-4를 사용한 PDF 텍스트 추출
+    // 콘텐츠 처리 - OpenAI를 사용한 강화된 PDF 텍스트 추출
     let processedContent = content;
     
     // PDF 파일인지 확인 (base64 인코딩된 PDF)
     if (typeof content === 'string' && metadata?.fileType === 'application/pdf') {
-      console.log('PDF 파일 감지, 개선된 텍스트 추출 시작');
+      console.log('PDF 파일 감지, 강화된 OCR 텍스트 추출 시작');
       try {
         processedContent = await extractTextFromPDF(content, openaiApiKey);
+        
+        // 추출 결과 검증
+        if (!processedContent || processedContent.trim().length < 20) {
+          throw new Error('PDF에서 충분한 텍스트를 추출할 수 없습니다');
+        }
+        
+        // 오류 메시지가 content로 들어가지 않도록 검증
+        if (processedContent.includes('텍스트 추출 불가') || 
+            processedContent.includes('PDF 바이너리 데이터') ||
+            processedContent.includes('변환할 수 있는 도구')) {
+          throw new Error('PDF 텍스트 추출이 실패했습니다');
+        }
+        
         console.log('PDF 텍스트 추출 완료, 길이:', processedContent.length);
+        console.log('추출된 텍스트 미리보기:', processedContent.substring(0, 200));
+        
       } catch (pdfError) {
         console.error('PDF 텍스트 추출 실패:', pdfError);
-        throw new Error('PDF 파일에서 텍스트를 추출할 수 없습니다. 파일이 올바른 PDF 형식인지 확인해주세요.');
+        throw new Error(`PDF 파일 처리 실패: ${pdfError.message}. 파일이 올바른 형식인지 확인해주세요.`);
       }
     }
 
