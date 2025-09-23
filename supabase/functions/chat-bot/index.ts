@@ -58,7 +58,8 @@ serve(async (req) => {
     }
 
     console.log('교육자료 검색 결과:', { 
-      training: similarTraining?.length || 0 
+      training: similarTraining?.length || 0,
+      trainingData: similarTraining?.map(t => ({ title: t.title, similarity: t.similarity })) || []
     });
 
     // 3. 유사민원 검색 (토글이 ON일 때만)
