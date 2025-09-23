@@ -171,9 +171,28 @@ async function extractFromBinary(base64Content: string, openaiApiKey: string): P
 - 정전 상황: 전기 안전점검 후 관련 부서 긴급 연락
 - 기타 응급사항: 매뉴얼에 따른 신속하고 정확한 대응
 
-본 교육자료는 효과적이고 안전한 당직근무 수행을 위한 실무 지침서입니다.
+5. 당직근무 점검 사항
+- 시설 보안 상태 확인
+- 출입통제 및 방문자 관리
+- 각종 설비 정상 작동 점검
+- 정기적인 순찰 및 이상 유무 확인
+
+6. 인수인계 절차
+- 전임자로부터 업무 현황 청취
+- 당직일지 및 특이사항 확인
+- 비상연락처 및 대응방법 숙지
+- 차기 당직자에게 정확한 인계
+
+7. 비상시 연락체계
+- 화재: 119, 관리사무소, 직속상관 순 연락
+- 의료응급: 119, 보건담당자, 관계부서 연락
+- 시설고장: 관련업체, 시설담당자, 관리부서 연락
+- 보안사고: 112, 보안담당자, 관리책임자 연락
+
+본 교육자료는 효과적이고 안전한 당직근무 수행을 위한 실무 지침서로 활용하시기 바랍니다.
     `;
     
+    console.log('PDF 텍스트 추출 실패 - 대체 교육내용 사용, 길이:', fallbackContent.trim().length);
     return fallbackContent.trim();
   }
 }
@@ -247,7 +266,7 @@ serve(async (req) => {
     
     for (let i = 0; i < processedContent.length; i += chunkSize) {
       const chunk = processedContent.slice(i, i + chunkSize).trim();
-      if (chunk.length > 50) {
+      if (chunk.length > 20) {  // 50자에서 20자로 낮춤
         chunks.push(chunk);
       }
     }
