@@ -450,7 +450,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
   // Fetch training materials
   const fetchTrainingMaterials = async () => {
     const { data, error } = await supabase
-      .from('training_vectors')
+      .from('training_materials')
       .select('*')
       .order('created_at', { ascending: false });
 
@@ -488,61 +488,40 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
   // Delete training material
   const handleDeleteTrainingMaterial = async (materialId: string) => {
     try {
-      // 먼저 삭제할 교육자료의 제목을 가져옴
-      const { data: materialData, error: fetchError } = await supabase
-        .from('training_vectors')
-        .select('title')
-        .eq('id', materialId)
-        .single();
-
-      if (fetchError) {
-        console.error('Error fetching material data:', fetchError);
-        toast({
-          title: "오류",
-          description: "교육자료 정보를 가져오는데 실패했습니다.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const materialTitle = materialData?.title;
-
-      // 1. training_vectors 테이블에서 삭제
-      const { error: vectorError } = await supabase
-        .from('training_vectors')
+      // 1. training_materials에서 삭제
+      const { error: materialError } = await supabase
+        .from('training_materials')
         .delete()
         .eq('id', materialId);
 
-      if (vectorError) {
-        console.error('Error deleting from training_vectors:', vectorError);
+      if (materialError) {
+        console.error('Error deleting from training_materials:', materialError);
         toast({
           title: "오류",
-          description: "교육자료 벡터 데이터 삭제에 실패했습니다.",
+          description: "교육자료 삭제에 실패했습니다.",
           variant: "destructive",
         });
         return;
       }
 
-      // 2. training_materials 테이블에서 같은 제목의 데이터 삭제
-      if (materialTitle) {
-        const { error: materialError } = await supabase
-          .from('training_materials')
-          .delete()
-          .eq('title', materialTitle);
+      // 2. training_vectors에서 해당 material_id를 가진 모든 벡터 삭제
+      const { error: vectorError } = await supabase
+        .from('training_vectors')
+        .delete()
+        .filter('metadata', 'cs', `{"parent_material_id":"${materialId}"}`);
 
-        if (materialError) {
-          console.error('Error deleting from training_materials:', materialError);
-          toast({
-            title: "경고",
-            description: "교육자료 원본 데이터 삭제 중 일부 오류가 발생했습니다.",
-            variant: "destructive",
-          });
-        }
+      if (vectorError) {
+        console.error('Error deleting vectors:', vectorError);
+        toast({
+          title: "경고", 
+          description: "교육자료는 삭제되었지만 벡터 데이터 삭제 중 일부 오류가 발생했습니다.",
+          variant: "destructive",
+        });
       }
 
       toast({
         title: "성공",
-        description: "교육자료가 모든 테이블에서 성공적으로 삭제되었습니다.",
+        description: "교육자료가 성공적으로 삭제되었습니다.",
       });
       fetchTrainingMaterials();
     } catch (error) {

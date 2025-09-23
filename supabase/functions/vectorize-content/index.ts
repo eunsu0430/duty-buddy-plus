@@ -23,97 +23,117 @@ function extractTextFromHWP(base64Content: string): string {
     
     console.log("HWP 파일 크기:", bytes.length);
     
-    // HWP 파일 헤더 확인
-    const header = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(0, 32));
-    console.log("파일 헤더:", header);
-    
-    // 텍스트 추출 시도 - 여러 인코딩으로 시도
+    // HWP 파일은 복합문서 구조이므로 직접 텍스트만 추출
     let extractedText = "";
+    let foundKoreanText = false;
     
-    // 방법 1: UTF-8로 디코딩 시도
-    try {
-      const utf8Text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-      const cleanText = utf8Text.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-      if (cleanText.length > 0) {
-        extractedText += cleanText + "\n";
+    // 한글 텍스트 패턴 검색 (UTF-16LE, EUC-KR 등)
+    const textChunks: string[] = [];
+    
+    // 방법 1: 연속된 한글/영문 문자열 추출
+    let tempText = "";
+    for (let i = 0; i < bytes.length - 1; i++) {
+      const byte1 = bytes[i];
+      const byte2 = bytes[i + 1];
+      
+      // UTF-16LE 한글 범위 체크
+      if (byte2 >= 0xAC && byte2 <= 0xD7 && byte1 >= 0x00 && byte1 <= 0xFF) {
+        try {
+          const char = String.fromCharCode((byte2 << 8) | byte1);
+          if (char.match(/[가-힣]/)) {
+            tempText += char;
+            foundKoreanText = true;
+            i++; // 2바이트 문자이므로 건너뛰기
+            continue;
+          }
+        } catch (e) {}
       }
-    } catch (e) {
-      console.log("UTF-8 디코딩 실패");
+      
+      // ASCII 영문/숫자/기본 특수문자
+      if (byte1 >= 32 && byte1 <= 126) {
+        tempText += String.fromCharCode(byte1);
+      }
+      // 줄바꿈 및 공백
+      else if (byte1 === 10 || byte1 === 13 || byte1 === 32) {
+        if (tempText.trim().length > 2) {
+          textChunks.push(tempText.trim());
+          tempText = "";
+        }
+        tempText += String.fromCharCode(byte1);
+      }
+      // 텍스트 구분자로 간주
+      else if (tempText.trim().length > 2) {
+        textChunks.push(tempText.trim());
+        tempText = "";
+      }
     }
     
-    // 방법 2: EUC-KR로 디코딩 시도 (한글 지원)
-    try {
-      // 간단한 한글 바이트 패턴 찾기
-      const koreanBytes = [];
+    if (tempText.trim().length > 2) {
+      textChunks.push(tempText.trim());
+    }
+    
+    // 방법 2: EUC-KR 방식으로도 시도
+    if (!foundKoreanText) {
+      console.log("UTF-16 방식 실패, EUC-KR 시도...");
       for (let i = 0; i < bytes.length - 1; i++) {
         const byte1 = bytes[i];
         const byte2 = bytes[i + 1];
         
-        // 한글 완성형 코드 범위 (EUC-KR)
+        // EUC-KR 한글 완성형 범위
         if (byte1 >= 0xB0 && byte1 <= 0xC8 && byte2 >= 0xA1 && byte2 <= 0xFE) {
-          koreanBytes.push(byte1, byte2);
-          i++; // 2바이트 문자이므로 다음 바이트 건너뛰기
+          try {
+            // EUC-KR을 UTF-8로 변환 시도
+            const eucBytes = new Uint8Array([byte1, byte2]);
+            const decoder = new TextDecoder('euc-kr', { fatal: false });
+            const char = decoder.decode(eucBytes);
+            if (char && char.match(/[가-힣]/)) {
+              tempText += char;
+              foundKoreanText = true;
+              i++; // 2바이트 건너뛰기
+              continue;
+            }
+          } catch (e) {}
         }
-        // ASCII 문자 (영문, 숫자, 특수문자)
-        else if (byte1 >= 0x20 && byte1 <= 0x7E) {
-          koreanBytes.push(byte1);
-        }
-        // 줄바꿈 문자
-        else if (byte1 === 0x0A || byte1 === 0x0D) {
-          koreanBytes.push(byte1);
-        }
-      }
-      
-      if (koreanBytes.length > 0) {
-        const koreanText = new TextDecoder('euc-kr', { fatal: false })
-          .decode(new Uint8Array(koreanBytes))
-          .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '') // 제어문자 제거 (단, \n, \r은 유지)
-          .trim();
         
-        if (koreanText.length > extractedText.length) {
-          extractedText = koreanText;
-        }
-      }
-    } catch (e) {
-      console.log("EUC-KR 디코딩 실패");
-    }
-    
-    // 방법 3: 단순 ASCII 텍스트 추출
-    if (extractedText.length < 50) {
-      let asciiText = "";
-      for (let i = 0; i < bytes.length; i++) {
-        const byte = bytes[i];
-        if (byte >= 32 && byte <= 126) { // 출력 가능한 ASCII
-          asciiText += String.fromCharCode(byte);
-        } else if (byte === 10 || byte === 13) { // 줄바꿈
-          asciiText += String.fromCharCode(byte);
+        // ASCII 처리
+        if (byte1 >= 32 && byte1 <= 126) {
+          tempText += String.fromCharCode(byte1);
+        } else if ((byte1 === 10 || byte1 === 13) && tempText.trim().length > 2) {
+          textChunks.push(tempText.trim());
+          tempText = "";
         }
       }
       
-      const cleanAscii = asciiText
-        .replace(/(.)\1{10,}/g, '$1') // 연속된 같은 문자 제거
-        .replace(/\s+/g, ' ') // 연속된 공백 정리
-        .trim();
-      
-      if (cleanAscii.length > extractedText.length) {
-        extractedText = cleanAscii;
+      if (tempText.trim().length > 2) {
+        textChunks.push(tempText.trim()); 
       }
     }
     
-    console.log("추출된 텍스트 길이:", extractedText.length);
-    
-    // 추출된 텍스트가 있으면 반환
-    if (extractedText.length > 20) {
-      const lines = extractedText.split('\n').filter(line => line.trim().length > 0);
-      const meaningfulText = lines.slice(0, 50).join('\n'); // 최대 50줄까지만
+    // 추출된 텍스트 정리
+    if (textChunks.length > 0) {
+      // 의미있는 텍스트만 필터링
+      const meaningfulChunks = textChunks
+        .filter(chunk => {
+          const cleanChunk = chunk.replace(/[^\w가-힣\s]/g, '').trim();
+          return cleanChunk.length >= 2 && 
+                 !cleanChunk.match(/^[0-9\s]+$/) && // 숫자만 있는 것 제외
+                 !cleanChunk.match(/^[!@#$%^&*()_+={}\[\]|\\:";'<>?.,\/\s]+$/); // 특수문자만 있는 것 제외
+        })
+        .slice(0, 100); // 최대 100개 청크까지만
       
-      if (meaningfulText.length > 20) {
-        console.log("HWP 텍스트 추출 성공");
-        return meaningfulText;
+      if (meaningfulChunks.length > 0) {
+        extractedText = meaningfulChunks.join('\n').trim();
+        console.log("HWP 텍스트 추출 성공, 청크 수:", meaningfulChunks.length);
+        console.log("추출된 텍스트 샘플:", extractedText.substring(0, 200));
+        
+        // 최소 길이 체크
+        if (extractedText.length >= 20) {
+          return extractedText;
+        }
       }
     }
     
-    console.log("HWP 텍스트 추출 실패 - 기본 메시지 반환");
+    console.log("HWP 텍스트 추출 실패 - 의미있는 텍스트 없음");
     return null;
     
   } catch (error) {
