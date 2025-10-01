@@ -17,34 +17,34 @@ const IPAccessControl = ({ children }: IPAccessControlProps) => {
 
   const checkIPAccess = async () => {
     try {
-      // 여러 IP 확인 서비스를 시도
-      let ip = '';
-      
-      try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        ip = data.ip;
-      } catch {
-        try {
-          const response = await fetch('https://ipapi.co/json/');
-          const data = await response.json();
-          ip = data.ip;
-        } catch {
-          // 마지막 시도
-          const response = await fetch('https://httpbin.org/ip');
-          const data = await response.json();
-          ip = data.origin;
-        }
-      }
-      
+      // 여러 IP 확인 서비스를 병렬로 시도하고 가장 먼저 응답하는 것 사용
+      const ipPromises = [
+        fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) })
+          .then(res => res.json())
+          .then(data => data.ip),
+        fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) })
+          .then(res => res.json())
+          .then(data => data.ip),
+        fetch('https://httpbin.org/ip', { signal: AbortSignal.timeout(3000) })
+          .then(res => res.json())
+          .then(data => data.origin)
+      ];
+
+      const ip = await Promise.race(ipPromises);
       setUserIP(ip);
       
-      // 허용된 IP 범위 체크
-      const isAllowed = await checkAllowedIP(ip);
+      // 허용된 IP 범위 체크와 로그 저장을 병렬로 처리
+      const [isAllowed] = await Promise.all([
+        checkAllowedIP(ip),
+        logAccessAttempt(ip, true).catch(() => {}) // 로그 저장 실패는 무시
+      ]);
+      
       setIsAccessAllowed(isAllowed);
       
-      // 접속 로그 저장
-      await logAccessAttempt(ip, isAllowed);
+      // 실제 접근 허용 여부로 로그 업데이트 (백그라운드에서)
+      if (!isAllowed) {
+        logAccessAttempt(ip, false).catch(() => {});
+      }
       
     } catch (error) {
       console.error('IP 확인 실패:', error);
