@@ -54,7 +54,7 @@ serve(async (req) => {
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.85,  // 임계값 상향 조정
+      match_threshold: 0.6,  // 임계값 상향 조정
       match_count: 5
     });
 
@@ -98,7 +98,7 @@ serve(async (req) => {
     if (includeComplaintCases) {
       const { data: complaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
         query_embedding: queryVector,
-        match_threshold: 0.85,
+        match_threshold: 0.8,
         match_count: 3
       });
       
