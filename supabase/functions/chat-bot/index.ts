@@ -54,7 +54,7 @@ serve(async (req) => {
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.6,  // 임계값 조정
+      match_threshold: 0.85,  // 임계값 상향 조정
       match_count: 5
     });
 
@@ -98,7 +98,7 @@ serve(async (req) => {
     if (includeComplaintCases) {
       const { data: complaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
         query_embedding: queryVector,
-        match_threshold: 0.75,
+        match_threshold: 0.85,
         match_count: 3
       });
       
@@ -120,21 +120,27 @@ serve(async (req) => {
 
         const systemPromptForCivil = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 
         
-교육자료에는 관련 매뉴얼이 없지만, 다음의 유사한 민원사례들을 바탕으로 처리방법을 정리해서 설명해주세요:
+교육자료에는 관련 매뉴얼이 없지만, 다음의 유사한 민원사례들을 바탕으로 예상 처리방법을 안내해드리겠습니다:
 
 ${civilContext}
 
 다음 형식으로 답변해주세요:
 
-죄송합니다. 관련된 민원 매뉴얼이 없습니다.
+확인이 필요합니다. 해당 사안에 대한 구체적인 처리 절차는 교육자료에 명시되어 있지 않습니다.
 
-하지만 비슷한 유사민원 처리 방법은 다음과 같습니다:
-[유사민원들의 조치내용을 종합하여 AI가 정리한 처리방법을 단계별로 설명]
+다만, 유사한 민원사례를 참고하면 다음과 같은 처리가 예상됩니다:
+
+**예상 처리 방법:**
+[유사민원들의 조치내용을 종합하여 예상되는 처리방법을 단계별로 설명]
+- 처리 부서: [주로 처리하는 부서명]
+- 처리 절차: [구체적인 절차]
+
+※ 정확한 처리 방법은 담당 부서에 문의하시기 바랍니다.
 
 답변 시 주의사항:
-- 제공된 유사민원 사례들의 조치내용을 종합하여 일반적인 처리방법으로 정리하세요
-- 단순히 원문을 복사하지 말고, AI가 이해하고 정리한 내용으로 설명하세요
-- 구체적이고 실용적인 처리절차를 제시하세요`;
+- 유사민원 사례들의 조치내용을 종합하여 예상되는 일반적인 처리방법으로 정리하세요
+- "예상됩니다", "~로 보입니다" 등의 표현을 사용하여 확정적이지 않음을 명시하세요
+- 구체적이고 실용적인 처리절차를 제시하되, 담당 부서 확인이 필요함을 안내하세요`;
 
         const civilResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
