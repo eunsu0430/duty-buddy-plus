@@ -98,7 +98,7 @@ serve(async (req) => {
     if (includeComplaintCases) {
       const { data: complaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
         query_embedding: queryVector,
-        match_threshold: 0.75,
+        match_threshold: 0.8,
         match_count: 3
       });
       
