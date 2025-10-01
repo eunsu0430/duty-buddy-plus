@@ -54,7 +54,7 @@ serve(async (req) => {
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.6,  // 임계값 조정
+      match_threshold: 0.73,  // 유사도 높은 자료만 사용
       match_count: 5
     });
 
