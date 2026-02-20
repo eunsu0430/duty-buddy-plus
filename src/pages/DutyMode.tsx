@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/components/ui/use-toast";
 import { SimilarComplaintsButtons } from "@/components/SimilarComplaintsButtons";
 import { supabase } from "@/integrations/supabase/client";
-import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft, Shield, Clock, Thermometer, Home, Settings } from "lucide-react";
+import { Phone, MapPin, Calendar, FileText, Send, MessageCircle, ArrowLeft, Shield, Clock, Thermometer, Home, Settings, Download, BookOpen } from "lucide-react";
+import { Dialog as ManualDialog, DialogContent as ManualDialogContent, DialogHeader as ManualDialogHeader, DialogTitle as ManualDialogTitle } from "@/components/ui/dialog";
 
 interface DutySchedule {
   id: string;
@@ -86,8 +87,19 @@ const DutyMode = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
   const [includeComplaintCases, setIncludeComplaintCases] = useState(true);
+  const [manuals, setManuals] = useState<any[]>([]);
+  const [showManuals, setShowManuals] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const fetchManuals = async () => {
+    const { data } = await supabase
+      .from('training_materials')
+      .select('*')
+      .not('file_url', 'is', null)
+      .order('created_at', { ascending: false });
+    setManuals(data || []);
+  };
 
   // 공휴일 데이터 가져오기
   const fetchHolidays = async () => {
@@ -145,7 +157,8 @@ const DutyMode = () => {
   useEffect(() => {
     fetchDutySchedules();
     fetchWeather();
-    fetchHolidays(); // 공휴일 데이터 가져오기 추가
+    fetchHolidays();
+    fetchManuals();
     
     
     // Update time every minute
@@ -450,6 +463,14 @@ ${complaintForm.description}
               <span>🌤️ 당진시 {weather.description} {weather.temperature}°C</span>
             </div>
             <Button
+              onClick={() => setShowManuals(true)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              매뉴얼
+            </Button>
+            <Button
               onClick={() => setShowComplaintForm(!showComplaintForm)}
               variant="default"
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
@@ -736,6 +757,43 @@ ${complaintForm.description}
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Manual Download Dialog */}
+      <ManualDialog open={showManuals} onOpenChange={setShowManuals}>
+        <ManualDialogContent className="rounded-3xl shadow-large border-0 bg-gradient-card max-w-lg">
+          <ManualDialogHeader>
+            <ManualDialogTitle className="text-xl flex items-center gap-3">
+              <div className="bg-primary/20 rounded-xl p-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+              </div>
+              매뉴얼 다운로드
+            </ManualDialogTitle>
+          </ManualDialogHeader>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {manuals.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">등록된 매뉴얼이 없습니다.</p>
+            ) : (
+              manuals.map((manual) => (
+                <a
+                  key={manual.id}
+                  href={manual.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 border rounded-2xl hover:bg-accent transition-colors"
+                >
+                  <Download className="w-5 h-5 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{manual.title.replace('📎 ', '')}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(manual.created_at).toLocaleDateString('ko-KR')}
+                    </div>
+                  </div>
+                </a>
+              ))
+            )}
+          </div>
+        </ManualDialogContent>
+      </ManualDialog>
 
     </div>
   );

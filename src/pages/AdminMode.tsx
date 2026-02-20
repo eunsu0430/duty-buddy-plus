@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2, Edit, Plus } from "lucide-react";
+import { Upload, FileSpreadsheet, BookOpen, Users, ArrowLeft, Trash2, Edit, Plus, Download } from "lucide-react";
 import { PersonalInfoMasker } from "@/lib/personalInfoMasker";
 import { ApiKeyManager } from "@/components/ApiKeyManager";
 import * as XLSX from 'xlsx';
@@ -999,7 +999,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
             <TabsContent value="training" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>교육자료 업로드</CardTitle>
+                  <CardTitle>교육자료 업로드 (AI 학습용)</CardTitle>
                   <CardDescription>
                     UTF-8 인코딩된 텍스트 파일(.txt)을 업로드하여 AI 학습을 위한 벡터화를 수행합니다.
                     파일 내용이 1000자 단위로 청크화되어 임베딩 벡터로 변환됩니다.
@@ -1026,9 +1026,54 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
 
               <Card>
                 <CardHeader>
-                  <CardTitle>교육자료 목록</CardTitle>
+                  <CardTitle>매뉴얼 파일 업로드 (다운로드용)</CardTitle>
                   <CardDescription>
-                    업로드된 교육자료들을 관리합니다.
+                    한글파일(.hwp), PDF, 워드 등 매뉴얼 파일을 업로드하면 당직자 모드에서 다운로드할 수 있습니다.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid w-full max-w-sm items-center gap-1.5">
+                    <Label htmlFor="manual-file">매뉴얼 파일</Label>
+                    <Input 
+                      id="manual-file" 
+                      type="file" 
+                      accept=".hwp,.hwpx,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setIsLoading(true);
+                        try {
+                          const fileExt = file.name.split('.').pop();
+                          const fileName = `${Date.now()}_${file.name}`;
+                          const { data: uploadData, error: uploadError } = await supabase.storage
+                            .from('manuals')
+                            .upload(fileName, file);
+                          if (uploadError) throw uploadError;
+                          const { data: urlData } = supabase.storage.from('manuals').getPublicUrl(fileName);
+                          // Save reference in training_materials with file_url
+                          await supabase.from('training_materials').insert([{
+                            title: `📎 ${file.name}`,
+                            content: `매뉴얼 파일: ${file.name}`,
+                            file_url: urlData.publicUrl
+                          }]);
+                          toast({ title: "업로드 완료", description: `${file.name} 파일이 업로드되었습니다.` });
+                          fetchTrainingMaterials();
+                        } catch (error: any) {
+                          console.error('Manual upload error:', error);
+                          toast({ title: "업로드 실패", description: error.message || "파일 업로드에 실패했습니다.", variant: "destructive" });
+                        }
+                        setIsLoading(false);
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>교육자료 및 매뉴얼 목록</CardTitle>
+                  <CardDescription>
+                    업로드된 교육자료 및 매뉴얼 파일들을 관리합니다.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1043,6 +1088,11 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
                             <p className="text-sm text-muted-foreground">
                               업로드 날짜: {new Date(material.created_at).toLocaleDateString('ko-KR')}
                             </p>
+                            {material.file_url && (
+                              <a href={material.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1">
+                                <Download className="w-3 h-3" /> 다운로드
+                              </a>
+                            )}
                           </div>
                           <Button
                             variant="destructive"
