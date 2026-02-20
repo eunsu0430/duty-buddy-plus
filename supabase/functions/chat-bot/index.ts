@@ -200,12 +200,12 @@ ${civilContext}
     let trainingContext = '';
     let complaintCases = '';
     
-    // 교육자료에서 처리방법 정보 추출
+    // 교육자료에서 처리방법 정보 추출 - 원문 전체를 포함
     if (similarTraining && similarTraining.length > 0) {
-      trainingContext = '\n\n=== 교육자료 기반 처리방법 ===\n';
+      trainingContext = '\n\n=== 교육자료 원문 ===\n';
       similarTraining.forEach((training, index) => {
-        trainingContext += `${index + 1}. ${training.title}\n`;
-        trainingContext += `내용: ${training.content.substring(0, 200)}...\n\n`;
+        trainingContext += `--- 교육자료 ${index + 1}: ${training.title} ---\n`;
+        trainingContext += `${training.content}\n\n`;
       });
     }
     
@@ -231,12 +231,15 @@ ${civilContext}
     }
 
     // 7. AI에게 답변 요청
-    const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다. 
-사용자의 질문에 대해 다음과 같은 형식으로 답변해주세요:
+    const systemPrompt = `당신은 당진시청 당직근무 지원 AI 어시스턴트입니다.
 
-**처리방법:**
-- 제공된 교육자료에 명시된 내용만을 바탕으로 구체적인 처리 절차를 단계별로 설명하세요
-- 교육자료에 없는 내용은 절대 추측하거나 일반적인 지식으로 답변하지 마세요
+**핵심 원칙: 교육자료 원문을 그대로 인용하세요!**
+
+답변 방식:
+1. 아래 제공된 교육자료 원문에서 질문과 관련된 부분을 찾으세요
+2. 찾은 내용을 **그대로 인용**하여 답변하세요. 절대로 내용을 지어내거나 추측하지 마세요
+3. 교육자료에서 관련 내용을 찾을 수 없으면, 반드시 "관련 교육자료를 찾을 수 없습니다."라고 답변하세요
+4. 교육자료 원문의 표현을 최대한 살려서 답변하세요
 
 ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
 `**참고 사례:**
@@ -244,10 +247,9 @@ ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ?
 
 답변 시 주의사항:
 - 전화번호나 연락처는 절대 언급하지 마세요
-- 교육자료에 명시된 내용만을 바탕으로 답변하세요. 추측이나 일반적인 지식은 사용하지 마세요
-- 교육자료에 부분적으로만 관련된 내용이 있다면, "확인이 필요합니다"라고 표현하세요
+- 교육자료 원문에 없는 내용은 절대 추가하지 마세요
+- 원문을 인용할 때는 내용을 변형하지 말고 그대로 전달하세요
 ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요' : ''}
-- 확실하지 않은 내용은 "확인이 필요합니다"라고 표현하세요
 - 친절하고 공손한 어조를 유지하세요
 
 제공된 정보:${trainingContext}${includeComplaintCases ? complaintCases : ''}${dutyInfo}`;
@@ -265,7 +267,7 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
           { role: 'user', content: `질문: ${message}` }
         ],
         temperature: 0.3,
-        max_tokens: 800,
+        max_tokens: 1500,
       }),
     });
 
