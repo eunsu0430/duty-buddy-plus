@@ -1044,7 +1044,7 @@ const handleTrainingUpload = async (event: React.ChangeEvent<HTMLInputElement>) 
                         setIsLoading(true);
                         try {
                           const fileExt = file.name.split('.').pop();
-                          const fileName = `${Date.now()}_${file.name}`;
+                          const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
                           const { data: uploadData, error: uploadError } = await supabase.storage
                             .from('manuals')
                             .upload(fileName, file);
