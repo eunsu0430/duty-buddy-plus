@@ -773,23 +773,39 @@ ${complaintForm.description}
             {manuals.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">등록된 매뉴얼이 없습니다.</p>
             ) : (
-              manuals.map((manual) => (
-                <a
-                  key={manual.id}
-                  href={manual.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 border rounded-2xl hover:bg-accent transition-colors"
-                >
-                  <Download className="w-5 h-5 text-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{manual.title.replace('📎 ', '')}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(manual.created_at).toLocaleDateString('ko-KR')}
+              manuals.map((manual) => {
+                const displayName = manual.title.replace('📎 ', '');
+                return (
+                  <button
+                    key={manual.id}
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(manual.file_url!);
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = displayName;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                      } catch (err) {
+                        console.error('다운로드 실패:', err);
+                      }
+                    }}
+                    className="flex items-center gap-3 p-3 border rounded-2xl hover:bg-accent transition-colors w-full text-left"
+                  >
+                    <Download className="w-5 h-5 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{displayName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(manual.created_at).toLocaleDateString('ko-KR')}
+                      </div>
                     </div>
-                  </div>
-                </a>
-              ))
+                  </button>
+                );
+              }))
             )}
           </div>
         </ManualDialogContent>
