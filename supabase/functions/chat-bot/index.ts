@@ -164,7 +164,7 @@ ${civilContext}
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             messages: [
               { role: 'system', content: systemPromptForCivil },
               { role: 'user', content: `질문: ${message}` }
@@ -267,7 +267,7 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `질문: ${message}` }
