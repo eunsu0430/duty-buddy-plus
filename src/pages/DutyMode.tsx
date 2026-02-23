@@ -805,7 +805,7 @@ ${complaintForm.description}
                     </div>
                   </button>
                 );
-              }))
+              })
             )}
           </div>
         </ManualDialogContent>
