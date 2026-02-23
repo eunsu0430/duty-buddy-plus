@@ -15,6 +15,102 @@ function koreanRatio(text: string) {
   return koreans / total;
 }
 
+// --- 섹션 기반 스마트 청킹 ---
+function smartChunk(text: string, maxChunkSize = 2500, overlap = 200): string[] {
+  // 섹션 구분자 패턴: □, ■, ◆, ○, ●, 또는 숫자+점 으로 시작하는 줄
+  const sectionPattern = /\n(?=\s*(?:□|■|◆|○|●|\d+\.\s|제\d+|[가-힣]+\s*[:：])\s*)/g;
+  
+  // 먼저 섹션 단위로 분리 시도
+  const sections = text.split(sectionPattern).filter(s => s.trim().length > 10);
+  
+  const chunks: string[] = [];
+  let currentChunk = "";
+  
+  for (const section of sections) {
+    const trimmedSection = section.trim();
+    
+    // 현재 청크 + 새 섹션이 최대 크기 이내면 합치기
+    if (currentChunk.length + trimmedSection.length + 2 <= maxChunkSize) {
+      currentChunk = currentChunk ? currentChunk + "\n\n" + trimmedSection : trimmedSection;
+    } else {
+      // 현재 청크가 있으면 저장
+      if (currentChunk.length > 30) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      // 새 섹션이 최대 크기보다 크면 문단 단위로 재분할
+      if (trimmedSection.length > maxChunkSize) {
+        const subChunks = splitByParagraph(trimmedSection, maxChunkSize, overlap);
+        chunks.push(...subChunks);
+        currentChunk = "";
+      } else {
+        // 오버랩: 이전 청크의 마지막 부분을 포함
+        if (chunks.length > 0 && overlap > 0) {
+          const lastChunk = chunks[chunks.length - 1];
+          const overlapText = lastChunk.substring(Math.max(0, lastChunk.length - overlap));
+          currentChunk = overlapText + "\n\n" + trimmedSection;
+        } else {
+          currentChunk = trimmedSection;
+        }
+      }
+    }
+  }
+  
+  // 남은 청크 저장
+  if (currentChunk.trim().length > 30) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  // 청크가 생성되지 않았으면 폴백: 문단 기반 분할
+  if (chunks.length === 0) {
+    return splitByParagraph(text, maxChunkSize, overlap);
+  }
+  
+  return chunks;
+}
+
+// --- 문단 기반 분할 (폴백) ---
+function splitByParagraph(text: string, maxSize: number, overlap: number): string[] {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 5);
+  const chunks: string[] = [];
+  let current = "";
+  
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (current.length + trimmed.length + 2 <= maxSize) {
+      current = current ? current + "\n\n" + trimmed : trimmed;
+    } else {
+      if (current.length > 30) {
+        chunks.push(current);
+      }
+      // 단일 문단이 maxSize보다 크면 글자수로 자름 (오버랩 포함)
+      if (trimmed.length > maxSize) {
+        const chars = Array.from(trimmed);
+        for (let i = 0; i < chars.length; i += maxSize - overlap) {
+          const slice = chars.slice(i, i + maxSize).join("").trim();
+          if (slice.length > 30) chunks.push(slice);
+        }
+        current = "";
+      } else {
+        // 오버랩 추가
+        if (chunks.length > 0 && overlap > 0) {
+          const last = chunks[chunks.length - 1];
+          const overlapText = last.substring(Math.max(0, last.length - overlap));
+          current = overlapText + "\n\n" + trimmed;
+        } else {
+          current = trimmed;
+        }
+      }
+    }
+  }
+  
+  if (current.trim().length > 30) {
+    chunks.push(current.trim());
+  }
+  
+  return chunks;
+}
+
 // --- 서버 핸들러 ---
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -37,10 +133,8 @@ serve(async (req) => {
     let processedContent = "";
     
     if (typeof content === "string") {
-      // UTF-8 텍스트 파일 처리
       processedContent = content.trim().normalize("NFC");
       console.log("텍스트 처리 완료, 길이:", processedContent.length);
-      console.log("텍스트 샘플 (처음 200자):", processedContent.substring(0, 200));
     } else {
       throw new Error("지원되지 않는 파일 형식입니다. UTF-8 텍스트 파일(.txt)만 지원됩니다.");
     }
@@ -49,7 +143,6 @@ serve(async (req) => {
       throw new Error("텍스트 내용이 너무 짧거나 비어있습니다. 최소 20자 이상 필요합니다.");
     }
 
-    // 한글 비율 검사 (일반 텍스트 파일인 경우만)
     const krRatio = koreanRatio(processedContent);
     console.log("한글비율:", krRatio.toFixed(3));
 
@@ -65,30 +158,16 @@ serve(async (req) => {
     const parentMaterialId = materialInsert.data?.id;
     console.log("training_materials id:", parentMaterialId);
 
-    // --- 청크 생성 ---
-    const chunkSize = 1000;
-    console.log("원본 텍스트 길이:", processedContent.length);
-    console.log("텍스트 샘플 (처음 200자):", processedContent.substring(0, 200));
-    
-    const chars = Array.from(processedContent);
-    const chunks: string[] = [];
-    
-    for (let i = 0; i < chars.length; i += chunkSize) {
-      const chunk = chars.slice(i, i + chunkSize).join("").trim();
-      console.log(`청크 ${chunks.length + 1} 길이:`, chunk.length);
-      
-      if (chunk.length > 20) {
-        chunks.push(chunk);
-        console.log(`청크 ${chunks.length} 내용 샘플:`, chunk.substring(0, 100) + "...");
-      } else {
-        console.log(`청크 ${chunks.length + 1} 너무 짧아서 제외됨 (${chunk.length}자)`);
-      }
-    }
+    // --- 스마트 청크 생성 (섹션 기반 + 오버랩) ---
+    const chunks = smartChunk(processedContent, 2500, 200);
 
     console.log("총 생성된 청크 개수:", chunks.length);
+    chunks.forEach((chunk, i) => {
+      console.log(`청크 ${i + 1} 길이: ${chunk.length}자, 시작: ${chunk.substring(0, 80)}...`);
+    });
     
     if (chunks.length === 0) {
-      throw new Error("처리 가능한 텍스트 청크가 생성되지 않았습니다. 텍스트 내용을 확인해주세요.");
+      throw new Error("처리 가능한 텍스트 청크가 생성되지 않았습니다.");
     }
 
     // --- 임베딩 생성 및 저장 ---

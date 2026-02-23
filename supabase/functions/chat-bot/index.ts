@@ -31,10 +31,10 @@ serve(async (req) => {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
-        body: JSON.stringify({
-          model: 'text-embedding-ada-002',
-          input: message
-        }),
+      body: JSON.stringify({
+        model: 'text-embedding-ada-002',
+        input: message
+      }),
     });
 
     if (!embeddingResponse.ok) {
@@ -43,55 +43,90 @@ serve(async (req) => {
 
     const embeddingData = await embeddingResponse.json();
     const queryVector = embeddingData.data[0].embedding;
-    
-    console.log('질문 벡터화 완료', {
-      vectorLength: queryVector.length,
-      firstFewValues: queryVector.slice(0, 5)
-    });
 
-    // 2. 교육자료에서 검색 (항상 수행) - 엄격한 임계값 사용
+    // 2. 교육자료에서 검색 - 더 많은 청크를 낮은 임계값으로 검색
     console.log('교육자료 검색 시작');
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.73,  // 유사도 높은 자료만 사용
-      match_count: 5
+      match_threshold: 0.7,
+      match_count: 8
     });
 
     if (trainingError) {
       console.error('교육자료 검색 오류:', trainingError);
     }
-    
-    // 임계값 없이 직접 테스트
-    console.log('직접 벡터 검색 테스트 시작');
-    const { data: directTest, error: directError } = await supabaseClient
-      .from('training_vectors')
-      .select('id, title, content')
-      .limit(5);
-      
-    if (directError) {
-      console.error('직접 검색 오류:', directError);
-    } else {
-      console.log('직접 검색 결과:', { count: directTest?.length || 0 });
-    }
-    
-    console.log('교육자료 원시 검색 결과:', {
-      searchParams: { threshold: 0.1, count: 10 },
-      resultCount: similarTraining?.length || 0,
-      hasError: !!trainingError,
-      errorDetails: trainingError,
-      results: similarTraining?.map(item => ({
-        id: item.id,
-        title: item.title?.substring(0, 50),
-        similarity: item.similarity,
-        contentPreview: item.content?.substring(0, 100)
-      })) || []
-    });
 
-    console.log('교육자료 검색 결과:', { 
+    console.log('교육자료 검색 결과:', {
       training: similarTraining?.length || 0,
       trainingData: similarTraining?.map(t => ({ title: t.title, similarity: t.similarity })) || []
     });
+
+    // 2-1. 인접 청크 가져오기 (같은 문서의 앞뒤 청크를 함께 가져와서 맥락 보강)
+    let enrichedTraining = similarTraining || [];
+    if (similarTraining && similarTraining.length > 0) {
+      const parentIds = new Set<string>();
+      const chunkIndices = new Map<string, number[]>();
+      
+      for (const item of similarTraining) {
+        const meta = item.metadata as any;
+        if (meta?.parent_material_id) {
+          parentIds.add(meta.parent_material_id);
+          const key = meta.parent_material_id;
+          if (!chunkIndices.has(key)) chunkIndices.set(key, []);
+          chunkIndices.get(key)!.push(meta.chunk_index);
+        }
+      }
+
+      // 인접 청크 인덱스 계산
+      const adjacentNeeded: { parentId: string; indices: number[] }[] = [];
+      for (const [parentId, indices] of chunkIndices) {
+        const adjacent = new Set<number>();
+        for (const idx of indices) {
+          adjacent.add(idx - 1);
+          adjacent.add(idx);
+          adjacent.add(idx + 1);
+        }
+        // 이미 가져온 인덱스 제거
+        for (const idx of indices) adjacent.delete(idx);
+        adjacent.delete(0); // 0은 유효하지 않음
+        if (adjacent.size > 0) {
+          adjacentNeeded.push({ parentId, indices: Array.from(adjacent) });
+        }
+      }
+
+      // 인접 청크 검색
+      if (adjacentNeeded.length > 0) {
+        for (const { parentId, indices } of adjacentNeeded) {
+          const { data: adjacentChunks } = await supabaseClient
+            .from('training_vectors')
+            .select('id, content, title, metadata')
+            .filter('metadata->>parent_material_id', 'eq', parentId)
+            .in('metadata->>chunk_index', indices.map(String));
+
+          if (adjacentChunks) {
+            for (const adj of adjacentChunks) {
+              // 중복 방지
+              if (!enrichedTraining.find(t => t.id === adj.id)) {
+                enrichedTraining.push({ ...adj, similarity: 0.65 });
+              }
+            }
+          }
+        }
+        
+        // chunk_index 순으로 정렬 (같은 문서끼리 순서대로)
+        enrichedTraining.sort((a, b) => {
+          const metaA = (a.metadata as any) || {};
+          const metaB = (b.metadata as any) || {};
+          const parentA = metaA.parent_material_id || '';
+          const parentB = metaB.parent_material_id || '';
+          if (parentA !== parentB) return parentA.localeCompare(parentB);
+          return (metaA.chunk_index || 0) - (metaB.chunk_index || 0);
+        });
+
+        console.log('인접 청크 포함 총 교육자료:', enrichedTraining.length);
+      }
+    }
 
     // 3. 유사민원 검색 (토글이 ON일 때만)
     let similarComplaints = [];
@@ -103,16 +138,12 @@ serve(async (req) => {
       });
       
       similarComplaints = complaints || [];
-      console.log('유사민원 검색 결과:', { 
-        complaints: similarComplaints.length 
-      });
+      console.log('유사민원 검색 결과:', { complaints: similarComplaints.length });
     }
 
     // 4. 교육자료가 없을 때 처리
-    if (!similarTraining || similarTraining.length === 0) {
-      // 토글이 ON이고 유사민원이 있을 때만 civil complaints 참고
+    if (!enrichedTraining || enrichedTraining.length === 0) {
       if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
-        // AI가 유사민원 조치내용을 정리해서 설명하도록 요청
         const civilContext = similarComplaints.map((complaint, index) => {
           const metadata = complaint.metadata || {};
           return `민원사례 ${index + 1}: ${complaint.content} (처리부서: ${metadata.department || '해당부서'})`;
@@ -134,27 +165,22 @@ ${civilContext}
 유사한 민원사례들을 분석한 결과, 다음과 같은 처리절차가 예상됩니다:
 
 **1단계: 접수 및 초기 대응**
-• [첫 번째 단계를 구체적으로 설명]
-• [필요한 정보나 조치사항]
+• [구체적으로 설명]
 
 **2단계: 주관부서 이관 및 처리**
 • [담당 부서와 처리 방법]
-• [예상 소요시간이나 절차]
 
 **3단계: 후속 조치 및 완료**
 • [최종 처리 방법]
-• [시민에게 안내할 사항]
 
 ⚠️ **중요 안내사항**
 • 위 내용은 유사민원 사례를 바탕으로 한 예상 처리절차입니다
-• 실제 처리는 담당부서(${similarComplaints[0]?.metadata?.department || '관련 부서'})의 판단에 따라 달라질 수 있습니다
-• 정확한 처리를 위해서는 해당 부서에 직접 문의하시기 바랍니다
+• 실제 처리는 담당부서의 판단에 따라 달라질 수 있습니다
 
 **답변 작성 시 필수 요구사항:**
 - 반드시 3단계 이상으로 구조화하여 작성하세요
 - 각 단계마다 최소 2개 이상의 구체적인 세부 항목을 포함하세요
-- 단순히 "부서에 문의하세요"로 끝내지 말고, 예상되는 구체적인 처리 과정을 상세히 설명하세요
-- 유사민원의 처리부서, 조치내용, 처리방법을 종합적으로 분석하여 실용적인 가이드를 제공하세요
+- 유사민원의 처리부서, 조치내용을 종합적으로 분석하여 실용적인 가이드를 제공하세요
 - 최소 150자 이상의 상세한 설명을 작성하세요`;
 
         const civilResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -187,7 +213,6 @@ ${civilContext}
         }
       }
       
-      // 교육자료가 없을 때는 항상 "관련 매뉴얼이 없다"고 답변
       return new Response(JSON.stringify({ 
         reply: "죄송합니다. 관련된 민원 매뉴얼이 없습니다.\n\n직접 관련 부서에 문의하시거나 당직실로 연락해주세요.",
         similarComplaints: []
@@ -196,20 +221,18 @@ ${civilContext}
       });
     }
 
-    // 5. 찾은 데이터를 바탕으로 컨텍스트 구성
+    // 5. 찾은 데이터를 바탕으로 컨텍스트 구성 - 순서대로 연결
     let trainingContext = '';
     let complaintCases = '';
     
-    // 교육자료에서 처리방법 정보 추출 - 원문 전체를 포함
-    if (similarTraining && similarTraining.length > 0) {
+    if (enrichedTraining && enrichedTraining.length > 0) {
       trainingContext = '\n\n=== 교육자료 원문 ===\n';
-      similarTraining.forEach((training, index) => {
-        trainingContext += `--- 교육자료 ${index + 1}: ${training.title} ---\n`;
+      enrichedTraining.forEach((training, index) => {
+        trainingContext += `--- 교육자료 ${index + 1}: ${training.title} (유사도: ${((training.similarity || 0) * 100).toFixed(0)}%) ---\n`;
         trainingContext += `${training.content}\n\n`;
       });
     }
     
-    // 유사 민원 사례 정보 (토글이 ON일 때만)
     if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
       complaintCases = '\n\n=== 유사민원사례 ===\n';
       similarComplaints.forEach((complaint, index) => {
@@ -224,7 +247,7 @@ ${civilContext}
       });
     }
 
-    // 6. 당직 정보 추가 (전화번호 제외)
+    // 6. 당직 정보 추가
     let dutyInfo = '';
     if (context && !context.includes('전화') && !context.includes('연락처')) {
       dutyInfo = `\n\n=== 현재 당직 정보 ===\n${context}`;
@@ -247,14 +270,27 @@ ${civilContext}
 - 매뉴얼에 전화번호, 연락처가 있으면 **반드시 그대로 포함**하세요 (매뉴얼의 전화번호는 공식 업무 연락처이므로 공개해야 합니다)
 - 담당 부서명, 담당자 직위 등도 매뉴얼에 있는 그대로 포함하세요
 
+**답변 구조:**
+📋 **관련 매뉴얼 내용**
+[매뉴얼 원문에서 관련 내용을 그대로 인용]
+
+📞 **연락처 및 담당부서** (매뉴얼에 있는 경우)
+[전화번호, 담당자, 부서명을 매뉴얼 그대로 기재]
+
+📝 **처리 절차** (매뉴얼에 절차가 있는 경우)
+1. [첫 번째 단계]
+2. [두 번째 단계]
+...
+
 ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
 `**참고 사례:**
-총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다. 상세 내용은 아래 버튼을 클릭하여 확인하실 수 있습니다.` : ''}
+총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다.` : ''}
 
 답변 시 주의사항:
 - 교육자료 원문에 없는 내용은 절대 추가하지 마세요
 - 원문을 인용할 때는 내용을 변형하지 말고 그대로 전달하세요
 - 매뉴얼에 있는 전화번호와 연락처는 반드시 포함하세요 (업무용 공식 연락처입니다)
+- 여러 교육자료 청크가 제공되면 같은 문서의 연속된 내용을 종합하여 답변하세요
 ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요' : ''}
 - 친절하고 공손한 어조를 유지하세요
 
@@ -273,7 +309,7 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
           { role: 'user', content: `질문: ${message}` }
         ],
         temperature: 0.3,
-        max_tokens: 1500,
+        max_tokens: 2000,
       }),
     });
 
@@ -286,7 +322,6 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
 
     console.log('AI 답변 생성 완료');
 
-    // 응답 반환 (토글이 ON일 때만 유사민원 포함)
     return new Response(JSON.stringify({ 
       reply,
       similarComplaints: includeComplaintCases ? (similarComplaints || []) : []
