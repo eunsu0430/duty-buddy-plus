@@ -146,7 +146,7 @@ serve(async (req) => {
         if (dateStr) {
           const complaintDate = new Date(dateStr);
           const daysDiff = (now.getTime() - complaintDate.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysDiff <= 90) recencyBonus = 0.1;
+          if (daysDiff <= 180) recencyBonus = 0.1;
           else if (daysDiff <= 365) recencyBonus = 0.06;
           else if (daysDiff <= 1095) recencyBonus = 0.03;
         }
