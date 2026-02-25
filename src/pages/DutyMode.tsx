@@ -226,13 +226,25 @@ const DutyMode = () => {
         `${duty.department_name}: ${duty.phone_number} (${duty.duty_facility})`
       ).join(', ');
 
-      const { data, error } = await supabase.functions.invoke('chat-bot', {
-        body: { 
-          message: currentMessage,
-          context: `당직 부서 정보: ${context}`,
-          includeComplaintCases: includeComplaintCases
+      // 재시도 로직 (최대 2회)
+      let data: any = null;
+      let error: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await supabase.functions.invoke('chat-bot', {
+          body: { 
+            message: currentMessage,
+            context: `당직 부서 정보: ${context}`,
+            includeComplaintCases: includeComplaintCases
+          }
+        });
+        data = result.data;
+        error = result.error;
+        if (!error) break;
+        if (attempt === 0) {
+          console.log('첫 번째 시도 실패, 재시도 중...');
+          await new Promise(r => setTimeout(r, 1000));
         }
-      });
+      }
 
       if (error) throw error;
 
@@ -275,8 +287,8 @@ const DutyMode = () => {
       setChatMessages(prev => [...prev, systemMessage]);
       
       toast({
-        title: "AI 연결 오류",
-        description: "기본 응답으로 처리되었습니다. 인터넷 연결을 확인해주세요.",
+        title: "AI 응답 지연",
+        description: "서버가 일시적으로 바쁩니다. 잠시 후 다시 시도해주세요.",
         variant: "destructive"
       });
     } finally {
