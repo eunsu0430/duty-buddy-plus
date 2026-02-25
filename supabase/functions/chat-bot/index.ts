@@ -137,8 +137,23 @@ serve(async (req) => {
         match_count: 3
       });
       
-      similarComplaints = complaints || [];
-      console.log('유사민원 검색 결과:', { complaints: similarComplaints.length });
+      // 최근 민원에 소폭 가중치 부여
+      const now = new Date();
+      similarComplaints = (complaints || []).map(c => {
+        const meta = c.metadata || {};
+        const dateStr = meta.date || meta.registration_date || '';
+        let recencyBonus = 0;
+        if (dateStr) {
+          const complaintDate = new Date(dateStr);
+          const daysDiff = (now.getTime() - complaintDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysDiff <= 30) recencyBonus = 0.03;
+          else if (daysDiff <= 90) recencyBonus = 0.02;
+          else if (daysDiff <= 180) recencyBonus = 0.01;
+        }
+        return { ...c, similarity: Math.min(c.similarity + recencyBonus, 1.0) };
+      }).sort((a, b) => b.similarity - a.similarity);
+      
+      console.log('유사민원 검색 결과 (가중치 적용):', { complaints: similarComplaints.length });
     }
 
     // 4. 교육자료가 없을 때 처리
