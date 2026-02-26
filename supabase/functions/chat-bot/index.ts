@@ -62,8 +62,8 @@ serve(async (req) => {
       trainingData: similarTraining?.map(t => ({ title: t.title, similarity: t.similarity })) || []
     });
 
-    // 상위 3개 청크만 사용 (비용 절감)
-    const topTraining = (similarTraining || []).slice(0, 3);
+    // 검색된 교육자료 전부 사용 (인접 청크는 가져오지 않음)
+    const topTraining = similarTraining || [];
     console.log('GPT에 전달할 교육자료:', topTraining.length, '개');
 
     // 3. 유사민원 검색 (토글이 ON일 때만)
