@@ -62,71 +62,9 @@ serve(async (req) => {
       trainingData: similarTraining?.map(t => ({ title: t.title, similarity: t.similarity })) || []
     });
 
-    // 2-1. 인접 청크 가져오기 (같은 문서의 앞뒤 청크를 함께 가져와서 맥락 보강)
-    let enrichedTraining = similarTraining || [];
-    if (similarTraining && similarTraining.length > 0) {
-      const parentIds = new Set<string>();
-      const chunkIndices = new Map<string, number[]>();
-      
-      for (const item of similarTraining) {
-        const meta = item.metadata as any;
-        if (meta?.parent_material_id) {
-          parentIds.add(meta.parent_material_id);
-          const key = meta.parent_material_id;
-          if (!chunkIndices.has(key)) chunkIndices.set(key, []);
-          chunkIndices.get(key)!.push(meta.chunk_index);
-        }
-      }
-
-      // 인접 청크 인덱스 계산
-      const adjacentNeeded: { parentId: string; indices: number[] }[] = [];
-      for (const [parentId, indices] of chunkIndices) {
-        const adjacent = new Set<number>();
-        for (const idx of indices) {
-          adjacent.add(idx - 1);
-          adjacent.add(idx);
-          adjacent.add(idx + 1);
-        }
-        // 이미 가져온 인덱스 제거
-        for (const idx of indices) adjacent.delete(idx);
-        adjacent.delete(0); // 0은 유효하지 않음
-        if (adjacent.size > 0) {
-          adjacentNeeded.push({ parentId, indices: Array.from(adjacent) });
-        }
-      }
-
-      // 인접 청크 검색
-      if (adjacentNeeded.length > 0) {
-        for (const { parentId, indices } of adjacentNeeded) {
-          const { data: adjacentChunks } = await supabaseClient
-            .from('training_vectors')
-            .select('id, content, title, metadata')
-            .filter('metadata->>parent_material_id', 'eq', parentId)
-            .in('metadata->>chunk_index', indices.map(String));
-
-          if (adjacentChunks) {
-            for (const adj of adjacentChunks) {
-              // 중복 방지
-              if (!enrichedTraining.find(t => t.id === adj.id)) {
-                enrichedTraining.push({ ...adj, similarity: 0.65 });
-              }
-            }
-          }
-        }
-        
-        // chunk_index 순으로 정렬 (같은 문서끼리 순서대로)
-        enrichedTraining.sort((a, b) => {
-          const metaA = (a.metadata as any) || {};
-          const metaB = (b.metadata as any) || {};
-          const parentA = metaA.parent_material_id || '';
-          const parentB = metaB.parent_material_id || '';
-          if (parentA !== parentB) return parentA.localeCompare(parentB);
-          return (metaA.chunk_index || 0) - (metaB.chunk_index || 0);
-        });
-
-        console.log('인접 청크 포함 총 교육자료:', enrichedTraining.length);
-      }
-    }
+    // 상위 3개 청크만 사용 (비용 절감)
+    const topTraining = (similarTraining || []).slice(0, 3);
+    console.log('GPT에 전달할 교육자료:', topTraining.length, '개');
 
     // 3. 유사민원 검색 (토글이 ON일 때만)
     let similarComplaints = [];
@@ -157,7 +95,7 @@ serve(async (req) => {
     }
 
     // 4. 교육자료가 없을 때 처리
-    if (!enrichedTraining || enrichedTraining.length === 0) {
+    if (!topTraining || topTraining.length === 0) {
       if (includeComplaintCases && similarComplaints && similarComplaints.length > 0) {
         const civilContext = similarComplaints.map((complaint, index) => {
           const metadata = complaint.metadata || {};
@@ -240,9 +178,9 @@ ${civilContext}
     let trainingContext = '';
     let complaintCases = '';
     
-    if (enrichedTraining && enrichedTraining.length > 0) {
+    if (topTraining && topTraining.length > 0) {
       trainingContext = '\n\n=== 교육자료 원문 ===\n';
-      enrichedTraining.forEach((training, index) => {
+      topTraining.forEach((training, index) => {
         trainingContext += `--- 교육자료 ${index + 1}: ${training.title} (유사도: ${((training.similarity || 0) * 100).toFixed(0)}%) ---\n`;
         trainingContext += `${training.content}\n\n`;
       });
