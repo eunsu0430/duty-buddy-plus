@@ -49,8 +49,8 @@ serve(async (req) => {
     
     const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
-      match_threshold: 0.7,
-      match_count: 8
+      match_threshold: 0.75,
+      match_count: 5
     });
 
     if (trainingError) {
@@ -211,7 +211,7 @@ ${civilContext}
               { role: 'user', content: `질문: ${message}` }
             ],
             temperature: 0.3,
-            max_tokens: 1200,
+            max_tokens: 1000,
           }),
         });
 
@@ -324,7 +324,7 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
           { role: 'user', content: `질문: ${message}` }
         ],
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 1200,
       }),
     });
 
