@@ -297,16 +297,12 @@ ${civilContext}
 2. [두 번째 단계]
 ...
 
-${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
-`**참고 사례:**
-총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다.` : ''}
-
 답변 시 주의사항:
 - 교육자료 원문에 없는 내용은 절대 추가하지 마세요
 - 원문을 인용할 때는 내용을 변형하지 말고 그대로 전달하세요
 - 매뉴얼에 있는 전화번호와 연락처는 반드시 포함하세요 (업무용 공식 연락처입니다)
 - 여러 교육자료 청크가 제공되면 같은 문서의 연속된 내용을 종합하여 답변하세요
-${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체적인 민원 내용을 포함하지 마세요' : ''}
+- 유사민원 사례 내용은 답변에 절대 포함하지 마세요. 유사민원은 별도 UI로 표시됩니다
 - 친절하고 공손한 어조를 유지하세요
 
 제공된 정보:${trainingContext}${includeComplaintCases ? complaintCases : ''}${dutyInfo}`;
