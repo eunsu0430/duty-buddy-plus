@@ -302,8 +302,8 @@ ${civilContext}
 [특별히 주의할 점이나 예외사항]
 
 ${includeComplaintCases && similarComplaints && similarComplaints.length > 0 ? 
-\`**참고 사례:**
-총 \${similarComplaints.length}건의 유사한 민원사례가 있습니다.\` : ''}
+`**참고 사례:**
+총 ${similarComplaints.length}건의 유사한 민원사례가 있습니다.` : ''}
 
 답변 시 주의사항:
 - 매뉴얼 원문의 **사실, 수치, 전화번호, 부서명은 절대 변경하지 마세요**
