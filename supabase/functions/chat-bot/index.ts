@@ -9,6 +9,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ===== OpenAI 호출용 재시도 헬퍼 =====
+// 429(Too Many Requests), 500/502/503/504(서버 일시 오류), 네트워크 에러 발생 시
+// 지수 백오프 + 약간의 jitter 로 최대 3회까지 재시도합니다.
+async function fetchOpenAIWithRetry(
+  url: string,
+  init: RequestInit,
+  label: string,
+  maxAttempts = 3
+): Promise<Response> {
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, init);
+
+      // 성공
+      if (res.ok) return res;
+
+      // 재시도 가능한 상태코드인지 판별
+      const retryable = res.status === 429 || (res.status >= 500 && res.status < 600);
+      if (!retryable || attempt === maxAttempts) {
+        return res; // 더 이상 재시도 안 함 → 호출자가 처리
+      }
+
+      // Retry-After 헤더가 있으면 우선 사용
+      const retryAfter = res.headers.get('retry-after');
+      let waitMs = retryAfter ? Math.min(parseFloat(retryAfter) * 1000, 5000) : 0;
+      if (!waitMs) {
+        // 지수 백오프: 800ms, 1600ms, 3200ms (+ 0~400ms jitter)
+        waitMs = Math.min(800 * Math.pow(2, attempt - 1), 4000) + Math.floor(Math.random() * 400);
+      }
+      console.log(`[${label}] ${res.status} 발생 - ${waitMs}ms 후 재시도 (${attempt}/${maxAttempts})`);
+      await new Promise(r => setTimeout(r, waitMs));
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxAttempts) throw err;
+      const waitMs = 800 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 400);
+      console.log(`[${label}] 네트워크 에러 - ${waitMs}ms 후 재시도 (${attempt}/${maxAttempts}):`, err);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+  }
+  throw lastErr || new Error(`[${label}] 재시도 모두 실패`);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -24,38 +67,54 @@ serve(async (req) => {
 
     console.log('질문 받음:', message);
 
-    // 1. 사용자 질문을 벡터화
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
+    // 1. 사용자 질문을 벡터화 (재시도 로직 적용)
+    const embeddingResponse = await fetchOpenAIWithRetry(
+      'https://api.openai.com/v1/embeddings',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-ada-002',
+          input: message
+        }),
       },
-      body: JSON.stringify({
-        model: 'text-embedding-ada-002',
-        input: message
-      }),
-    });
+      'embeddings'
+    );
 
     if (!embeddingResponse.ok) {
-      throw new Error('벡터화 실패');
+      throw new Error(`임베딩 API 오류: ${embeddingResponse.status}`);
     }
 
     const embeddingData = await embeddingResponse.json();
     const queryVector = embeddingData.data[0].embedding;
 
-    // 2. 교육자료에서 검색 - 더 많은 청크를 낮은 임계값으로 검색
-    console.log('교육자료 검색 시작');
-    
-    const { data: similarTraining, error: trainingError } = await supabaseClient.rpc('match_training_materials', {
+    // 2 + 3. 교육자료 검색 & 유사민원 검색을 동시에 실행 (병렬화)
+    console.log('교육자료/유사민원 병렬 검색 시작');
+
+    const trainingPromise = supabaseClient.rpc('match_training_materials', {
       query_embedding: queryVector,
       match_threshold: 0.75,
       match_count: 5
     });
 
-    if (trainingError) {
-      console.error('교육자료 검색 오류:', trainingError);
-    }
+    const complaintsPromise = includeComplaintCases
+      ? supabaseClient.rpc('match_civil_complaints', {
+          query_embedding: queryVector,
+          match_threshold: 0.8,
+          match_count: 3
+        })
+      : Promise.resolve({ data: [], error: null });
+
+    const [
+      { data: similarTraining, error: trainingError },
+      { data: rawComplaints, error: complaintsError }
+    ] = await Promise.all([trainingPromise, complaintsPromise]);
+
+    if (trainingError) console.error('교육자료 검색 오류:', trainingError);
+    if (complaintsError) console.error('유사민원 검색 오류:', complaintsError);
 
     console.log('교육자료 검색 결과:', {
       training: similarTraining?.length || 0,
@@ -95,15 +154,19 @@ serve(async (req) => {
         }
       }
 
-      // 인접 청크 검색
+      // 인접 청크 검색 (여러 parentId를 병렬로 조회)
       if (adjacentNeeded.length > 0) {
-        for (const { parentId, indices } of adjacentNeeded) {
-          const { data: adjacentChunks } = await supabaseClient
-            .from('training_vectors')
-            .select('id, content, title, metadata')
-            .filter('metadata->>parent_material_id', 'eq', parentId)
-            .in('metadata->>chunk_index', indices.map(String));
+        const adjacentResults = await Promise.all(
+          adjacentNeeded.map(({ parentId, indices }) =>
+            supabaseClient
+              .from('training_vectors')
+              .select('id, content, title, metadata')
+              .filter('metadata->>parent_material_id', 'eq', parentId)
+              .in('metadata->>chunk_index', indices.map(String))
+          )
+        );
 
+        for (const { data: adjacentChunks } of adjacentResults) {
           if (adjacentChunks) {
             for (const adj of adjacentChunks) {
               // 중복 방지
@@ -128,18 +191,11 @@ serve(async (req) => {
       }
     }
 
-    // 3. 유사민원 검색 (토글이 ON일 때만)
-    let similarComplaints = [];
+    // 3. 유사민원 가중치 적용 (이미 병렬로 가져옴)
+    let similarComplaints: any[] = [];
     if (includeComplaintCases) {
-      const { data: complaints, error: complaintsError } = await supabaseClient.rpc('match_civil_complaints', {
-        query_embedding: queryVector,
-        match_threshold: 0.8,
-        match_count: 3
-      });
-      
-      // 최근 민원에 소폭 가중치 부여
       const now = new Date();
-      similarComplaints = (complaints || []).map(c => {
+      similarComplaints = (rawComplaints || []).map((c: any) => {
         const meta = c.metadata || {};
         const dateStr = meta.date || meta.registration_date || '';
         let recencyBonus = 0;
@@ -151,8 +207,8 @@ serve(async (req) => {
           else if (daysDiff <= 1095) recencyBonus = 0.03;
         }
         return { ...c, similarity: Math.min(c.similarity + recencyBonus, 1.0) };
-      }).sort((a, b) => b.similarity - a.similarity);
-      
+      }).sort((a: any, b: any) => b.similarity - a.similarity);
+
       console.log('유사민원 검색 결과 (가중치 적용):', { complaints: similarComplaints.length });
     }
 
@@ -198,22 +254,26 @@ ${civilContext}
 - 유사민원의 처리부서, 조치내용을 종합적으로 분석하여 실용적인 가이드를 제공하세요
 - 최소 150자 이상의 상세한 설명을 작성하세요`;
 
-        const civilResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
-            'Content-Type': 'application/json',
+        const civilResponse = await fetchOpenAIWithRetry(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: systemPromptForCivil },
+                { role: 'user', content: `질문: ${message}` }
+              ],
+              temperature: 0.3,
+              max_tokens: 1000,
+            }),
           },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: systemPromptForCivil },
-              { role: 'user', content: `질문: ${message}` }
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
-          }),
-        });
+          'chat-civil-only'
+        );
 
         if (civilResponse.ok) {
           const civilData = await civilResponse.json();
@@ -315,22 +375,26 @@ ${includeComplaintCases ? '- 참고 사례 부분에는 JSON 데이터나 구체
 
 제공된 정보:${trainingContext}${includeComplaintCases ? complaintCases : ''}${dutyInfo}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
+    const response = await fetchOpenAIWithRetry(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `질문: ${message}` }
+          ],
+          temperature: 0.3,
+          max_tokens: 1200,
+        }),
       },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `질문: ${message}` }
-        ],
-        temperature: 0.3,
-        max_tokens: 1200,
-      }),
-    });
+      'chat-main'
+    );
 
     if (!response.ok) {
       throw new Error(`OpenAI API 오류: ${response.status}`);
