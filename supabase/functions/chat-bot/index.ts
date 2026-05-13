@@ -100,12 +100,24 @@ serve(async (req) => {
       match_count: 5
     });
 
-    const complaintsPromise = includeComplaintCases
-      ? supabaseClient.rpc('match_civil_complaints', {
+    // 유사민원 RPC: statement timeout(57014) 발생 시 1회 재시도 (cold start 대응)
+    const matchComplaintsWithRetry = async () => {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const result = await supabaseClient.rpc('match_civil_complaints', {
           query_embedding: queryVector,
           match_threshold: 0.8,
           match_count: 3
-        })
+        });
+        const isTimeout = result.error && (result.error as any).code === '57014';
+        if (!isTimeout || attempt === 2) return result;
+        console.log(`[match_civil_complaints] statement timeout - 재시도 (${attempt}/2)`);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      return { data: [], error: null };
+    };
+
+    const complaintsPromise = includeComplaintCases
+      ? matchComplaintsWithRetry()
       : Promise.resolve({ data: [], error: null });
 
     const [
